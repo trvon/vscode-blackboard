@@ -31,7 +31,15 @@ class CreateContextTool implements vscode.LanguageModelTool<CreateContextInput> 
         options: vscode.LanguageModelToolInvocationOptions<CreateContextInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { id, name, description, set_current } = options.input;
+        const input = (options.input ?? {}) as Partial<CreateContextInput>;
+        const { id, name, description, set_current } = input;
+        if (!id || !name) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { id: string, name: string, description?: string, set_current?: boolean }",
+                ),
+            ]);
+        }
         const context = await this.bb.createContext(id, name, description);
 
         if (set_current !== false) {
@@ -69,8 +77,9 @@ class GetContextSummaryTool
         options: vscode.LanguageModelToolInvocationOptions<GetContextSummaryInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
+        const input = (options.input ?? {}) as Partial<GetContextSummaryInput>;
         const contextId =
-            options.input.context_id || this.state.currentContextId || "default";
+            input.context_id || this.state.currentContextId || "default";
         const summary = await this.bb.getContextSummary(contextId);
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(summary),
@@ -93,10 +102,18 @@ class SetContextTool implements vscode.LanguageModelTool<SetContextInput> {
         options: vscode.LanguageModelToolInvocationOptions<SetContextInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        this.state.currentContextId = options.input.context_id;
+        const input = (options.input ?? {}) as Partial<SetContextInput>;
+        if (!input.context_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { context_id: string }",
+                ),
+            ]);
+        }
+        this.state.currentContextId = input.context_id;
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(
-                `Current context set to: ${options.input.context_id}`,
+                `Current context set to: ${input.context_id}`,
             ),
         ]);
     }

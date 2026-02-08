@@ -4,7 +4,7 @@
   "description": "Multi-agent coordination via YAMS blackboard — post findings, claim tasks, and discover agent work through direct daemon IPC.",
   "version": "0.1.0",
   "publisher": "trvon",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://github.com/trvon/vscode-blackboard.git"
@@ -26,7 +26,11 @@
     "watch": "node esbuild.mjs --watch",
     "proto:generate": "npx buf generate",
     "typecheck": "tsc --noEmit",
-    "package": "vsce package"
+    "vscode:prepublish": "npm run build",
+    "test:build": "tsc -p tsconfig.test.json",
+    "test": "npm run test:build && node scripts/run-tests.mjs dist-test/__tests__",
+    "test:coverage": "npm run test:build && node scripts/run-tests.mjs --coverage dist-test/__tests__",
+    "package": "npx --yes @vscode/vsce package"
   },
   "contributes": {
     "chatParticipants": [

@@ -76,4 +76,5 @@ npm run proto:generate
 
 ## License
 
-MIT
+GPL-3.0-only (see LICENSE)
+

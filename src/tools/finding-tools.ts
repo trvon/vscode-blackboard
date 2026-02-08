@@ -49,7 +49,14 @@ class PostFindingTool implements vscode.LanguageModelTool<PostFindingInput> {
         options: vscode.LanguageModelToolInvocationOptions<PostFindingInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const args = options.input;
+        const args = (options.input ?? {}) as Partial<PostFindingInput>;
+        if (!args.agent_id || !args.topic || !args.title || !args.content) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string, topic: string, title: string, content: string, ... }",
+                ),
+            ]);
+        }
         const finding = await this.bb.postFinding({
             agent_id: args.agent_id,
             topic: args.topic as FindingTopic,
@@ -102,7 +109,7 @@ class QueryFindingsTool implements vscode.LanguageModelTool<QueryFindingsInput> 
         options: vscode.LanguageModelToolInvocationOptions<QueryFindingsInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const args = options.input;
+        const args = (options.input ?? {}) as Partial<QueryFindingsInput>;
         const findings = await this.bb.queryFindings({
             topic: args.topic as FindingTopic | undefined,
             agent_id: args.agent_id,
@@ -151,7 +158,14 @@ class SearchFindingsTool implements vscode.LanguageModelTool<SearchFindingsInput
         options: vscode.LanguageModelToolInvocationOptions<SearchFindingsInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const args = options.input;
+        const args = (options.input ?? {}) as Partial<SearchFindingsInput>;
+        if (!args.query) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { query: string, topic?: string, limit?: number }",
+                ),
+            ]);
+        }
         const findings = await this.bb.searchFindings(args.query, {
             topic: args.topic,
             limit: args.limit ?? 10,
@@ -191,11 +205,19 @@ class GetFindingTool implements vscode.LanguageModelTool<GetFindingInput> {
         options: vscode.LanguageModelToolInvocationOptions<GetFindingInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const finding = await this.bb.getFinding(options.input.finding_id);
+        const input = (options.input ?? {}) as Partial<GetFindingInput>;
+        if (!input.finding_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { finding_id: string }",
+                ),
+            ]);
+        }
+        const finding = await this.bb.getFinding(input.finding_id);
         if (!finding) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    `Finding not found: ${options.input.finding_id}`,
+                    `Finding not found: ${input.finding_id}`,
                 ),
             ]);
         }
@@ -239,7 +261,15 @@ class AcknowledgeFindingTool
         options: vscode.LanguageModelToolInvocationOptions<AcknowledgeFindingInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { finding_id, agent_id } = options.input;
+        const input = (options.input ?? {}) as Partial<AcknowledgeFindingInput>;
+        const { finding_id, agent_id } = input;
+        if (!finding_id || !agent_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { finding_id: string, agent_id: string }",
+                ),
+            ]);
+        }
         await this.bb.acknowledgeFinding(finding_id, agent_id);
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(
@@ -268,7 +298,15 @@ class ResolveFindingTool
         options: vscode.LanguageModelToolInvocationOptions<ResolveFindingInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { finding_id, agent_id, resolution } = options.input;
+        const input = (options.input ?? {}) as Partial<ResolveFindingInput>;
+        const { finding_id, agent_id, resolution } = input;
+        if (!finding_id || !agent_id || !resolution) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { finding_id: string, agent_id: string, resolution: string }",
+                ),
+            ]);
+        }
         await this.bb.resolveFinding(finding_id, agent_id, resolution);
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(

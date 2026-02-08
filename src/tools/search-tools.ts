@@ -26,7 +26,7 @@ class RecentActivityTool
         options: vscode.LanguageModelToolInvocationOptions<RecentActivityInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const limit = options.input.limit || 10;
+        const limit = (options.input as RecentActivityInput | undefined)?.limit ?? 10;
         const findings = await this.bb.queryFindings({ limit, offset: 0 });
         const tasks = await this.bb.queryTasks({ limit, offset: 0 });
 
@@ -107,7 +107,15 @@ class ConnectionsTool implements vscode.LanguageModelTool<ConnectionsInput> {
         options: vscode.LanguageModelToolInvocationOptions<ConnectionsInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { path, depth } = options.input;
+        const input = (options.input ?? {}) as Partial<ConnectionsInput>;
+        const { path, depth } = input;
+        if (!path) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { path: string, depth?: number }",
+                ),
+            ]);
+        }
         const graph = await this.bb.getConnections(path, depth ?? 2);
 
         if (graph.nodes.length === 0) {

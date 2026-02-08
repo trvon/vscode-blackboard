@@ -32,7 +32,14 @@ class CreateTaskTool implements vscode.LanguageModelTool<CreateTaskInput> {
         options: vscode.LanguageModelToolInvocationOptions<CreateTaskInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const args = options.input;
+        const args = (options.input ?? {}) as Partial<CreateTaskInput>;
+        if (!args.title || !args.type || !args.created_by) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { title: string, type: string, created_by: string, ... }",
+                ),
+            ]);
+        }
         const task = await this.bb.createTask({
             title: args.title,
             description: args.description,
@@ -72,7 +79,8 @@ class GetReadyTasksTool implements vscode.LanguageModelTool<GetReadyTasksInput> 
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const tasks = await this.bb.getReadyTasks();
-        const limited = tasks.slice(0, options.input.limit || 10);
+        const limit = (options.input as GetReadyTasksInput | undefined)?.limit ?? 10;
+        const limited = tasks.slice(0, limit);
 
         if (limited.length === 0) {
             return new vscode.LanguageModelToolResult([
@@ -109,7 +117,15 @@ class ClaimTaskTool implements vscode.LanguageModelTool<ClaimTaskInput> {
         options: vscode.LanguageModelToolInvocationOptions<ClaimTaskInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { task_id, agent_id } = options.input;
+        const input = (options.input ?? {}) as Partial<ClaimTaskInput>;
+        const { task_id, agent_id } = input;
+        if (!task_id || !agent_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { task_id: string, agent_id: string }",
+                ),
+            ]);
+        }
         const task = await this.bb.claimTask(task_id, agent_id);
         if (!task) {
             return new vscode.LanguageModelToolResult([
@@ -142,7 +158,15 @@ class UpdateTaskTool implements vscode.LanguageModelTool<UpdateTaskInput> {
         options: vscode.LanguageModelToolInvocationOptions<UpdateTaskInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { task_id, status, error } = options.input;
+        const input = (options.input ?? {}) as Partial<UpdateTaskInput>;
+        const { task_id, status, error } = input;
+        if (!task_id || !status) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { task_id: string, status: string, error?: string }",
+                ),
+            ]);
+        }
         const task = await this.bb.updateTask(task_id, {
             status: status as TaskStatus,
             error,
@@ -176,7 +200,15 @@ class CompleteTaskTool implements vscode.LanguageModelTool<CompleteTaskInput> {
         options: vscode.LanguageModelToolInvocationOptions<CompleteTaskInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { task_id, findings } = options.input;
+        const input = (options.input ?? {}) as Partial<CompleteTaskInput>;
+        const { task_id, findings } = input;
+        if (!task_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { task_id: string, findings?: string[] }",
+                ),
+            ]);
+        }
         const task = await this.bb.completeTask(task_id, { findings });
         if (!task) {
             return new vscode.LanguageModelToolResult([
@@ -206,7 +238,15 @@ class FailTaskTool implements vscode.LanguageModelTool<FailTaskInput> {
         options: vscode.LanguageModelToolInvocationOptions<FailTaskInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { task_id, error } = options.input;
+        const input = (options.input ?? {}) as Partial<FailTaskInput>;
+        const { task_id, error } = input;
+        if (!task_id || !error) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { task_id: string, error: string }",
+                ),
+            ]);
+        }
         const task = await this.bb.failTask(task_id, error);
         if (!task) {
             return new vscode.LanguageModelToolResult([
@@ -245,7 +285,7 @@ class QueryTasksTool implements vscode.LanguageModelTool<QueryTasksInput> {
         options: vscode.LanguageModelToolInvocationOptions<QueryTasksInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const args = options.input;
+        const args = (options.input ?? {}) as Partial<QueryTasksInput>;
         const tasks = await this.bb.queryTasks({
             type: args.type as TaskType | undefined,
             status: args.status as TaskStatus | undefined,
@@ -293,7 +333,14 @@ class SearchTasksTool implements vscode.LanguageModelTool<SearchTasksInput> {
         options: vscode.LanguageModelToolInvocationOptions<SearchTasksInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const args = options.input;
+        const args = (options.input ?? {}) as Partial<SearchTasksInput>;
+        if (!args.query) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { query: string, type?: string, limit?: number }",
+                ),
+            ]);
+        }
         const tasks = await this.bb.searchTasks(args.query, {
             type: args.type,
             limit: args.limit ?? 10,

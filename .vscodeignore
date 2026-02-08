@@ -1,9 +1,16 @@
 src/**
 proto/**
 __tests__/**
+scripts/**
+.claude/**
+node_modules/**
 .gitignore
 tsconfig.json
+tsconfig.test.json
 esbuild.mjs
 buf.gen.yaml
+buf.yaml
 *.map
 docs/**
+dist-test/**
+

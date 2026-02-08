@@ -7,6 +7,7 @@
  */
 
 import * as vscode from "vscode";
+import { randomUUID } from "node:crypto";
 import { YamsDaemonClient } from "./daemon/client.js";
 import { socketExists, resolveSocketPath } from "./daemon/socket.js";
 import { YamsBlackboard } from "./blackboard/blackboard.js";
@@ -106,9 +107,18 @@ export async function activate(
     }
 
     // 5. Create blackboard instance
+    // Persist instanceId per-workspace so tags remain stable across reloads.
+    const instanceIdKey = "yamsBlackboard.instanceId";
+    let instanceId = context.workspaceState.get<string>(instanceIdKey);
+    if (!instanceId) {
+        instanceId = randomUUID();
+        await context.workspaceState.update(instanceIdKey, instanceId);
+    }
+
     const bb = new YamsBlackboard(client, {
         sessionName: "vscode-blackboard",
         defaultScope: "persistent",
+        instanceId,
     });
 
     // 6. Create shared context state

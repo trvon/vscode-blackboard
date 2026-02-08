@@ -26,6 +26,7 @@ import type {
     FindingSeverity,
 } from "./types.js";
 import type { YamsDaemonClient, ListEntry } from "../daemon/client.js";
+import { randomUUID } from "node:crypto";
 
 export class YamsBlackboard {
     private sessionName?: string;
@@ -41,7 +42,7 @@ export class YamsBlackboard {
         } = {},
     ) {
         this.sessionName = options.sessionName;
-        this.instanceId = options.instanceId || crypto.randomUUID();
+        this.instanceId = options.instanceId || randomUUID();
     }
 
     private instanceTag(): string {
@@ -147,6 +148,23 @@ export class YamsBlackboard {
             registered_at: this.nowISO(),
             status: agent.status || "active",
         };
+
+        // Idempotency: avoid writing a new version when nothing material changed.
+        // This prevents duplicate "active agent" entries when tools call register repeatedly.
+        const existing = await this.getAgent(agent.id);
+        if (existing) {
+            const normCaps = (caps: string[] | undefined) =>
+                [...new Set((caps ?? []).filter(Boolean))].sort();
+            const same =
+                existing.id === full.id &&
+                existing.name === full.name &&
+                (existing.status || "active") === full.status &&
+                JSON.stringify(normCaps(existing.capabilities)) ===
+                    JSON.stringify(normCaps(full.capabilities));
+            if (same) {
+                return existing;
+            }
+        }
 
         const content = JSON.stringify(full, null, 2);
         const tags = [

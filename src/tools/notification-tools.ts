@@ -29,7 +29,14 @@ class SubscribeTool implements vscode.LanguageModelTool<SubscribeInput> {
         options: vscode.LanguageModelToolInvocationOptions<SubscribeInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const args = options.input;
+        const args = (options.input ?? {}) as Partial<SubscribeInput>;
+        if (!args.agent_id || !args.pattern_type || !args.pattern_value) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string, pattern_type: string, pattern_value: string, ... }",
+                ),
+            ]);
+        }
         const expiresAt = args.expires_in_hours
             ? new Date(
                   Date.now() + args.expires_in_hours * 60 * 60 * 1000,
@@ -78,7 +85,15 @@ class UnsubscribeTool implements vscode.LanguageModelTool<UnsubscribeInput> {
         options: vscode.LanguageModelToolInvocationOptions<UnsubscribeInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { agent_id, subscription_id } = options.input;
+        const input = (options.input ?? {}) as Partial<UnsubscribeInput>;
+        const { agent_id, subscription_id } = input;
+        if (!agent_id || !subscription_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string, subscription_id: string }",
+                ),
+            ]);
+        }
         const success = await this.bb.cancelSubscription(agent_id, subscription_id);
         const text = success
             ? `Subscription ${subscription_id} cancelled.`
@@ -106,8 +121,16 @@ class ListSubscriptionsTool
         options: vscode.LanguageModelToolInvocationOptions<ListSubscriptionsInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
+        const input = (options.input ?? {}) as Partial<ListSubscriptionsInput>;
+        if (!input.agent_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string }",
+                ),
+            ]);
+        }
         const subscriptions = await this.bb.listSubscriptions(
-            options.input.agent_id,
+            input.agent_id,
         );
 
         if (subscriptions.length === 0) {
@@ -148,7 +171,15 @@ class CheckNotificationsTool
         options: vscode.LanguageModelToolInvocationOptions<CheckNotificationsInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { agent_id, limit, mark_as_read } = options.input;
+        const input = (options.input ?? {}) as Partial<CheckNotificationsInput>;
+        const { agent_id, limit, mark_as_read } = input;
+        if (!agent_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string, limit?: number, mark_as_read?: boolean }",
+                ),
+            ]);
+        }
         const notifications = await this.bb.getUnreadNotifications(
             agent_id,
             limit ?? 10,
@@ -201,8 +232,16 @@ class NotificationCountTool
         options: vscode.LanguageModelToolInvocationOptions<NotificationCountInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
+        const input = (options.input ?? {}) as Partial<NotificationCountInput>;
+        if (!input.agent_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string }",
+                ),
+            ]);
+        }
         const counts = await this.bb.getNotificationCount(
-            options.input.agent_id,
+            input.agent_id,
         );
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(
@@ -230,7 +269,15 @@ class MarkNotificationReadTool
         options: vscode.LanguageModelToolInvocationOptions<MarkNotificationReadInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { agent_id, notification_id } = options.input;
+        const input = (options.input ?? {}) as Partial<MarkNotificationReadInput>;
+        const { agent_id, notification_id } = input;
+        if (!agent_id || !notification_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string, notification_id: string }",
+                ),
+            ]);
+        }
         const success = await this.bb.markNotificationRead(
             agent_id,
             notification_id,
@@ -259,8 +306,16 @@ class MarkAllReadTool implements vscode.LanguageModelTool<MarkAllReadInput> {
         options: vscode.LanguageModelToolInvocationOptions<MarkAllReadInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
+        const input = (options.input ?? {}) as Partial<MarkAllReadInput>;
+        if (!input.agent_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string }",
+                ),
+            ]);
+        }
         const count = await this.bb.markAllNotificationsRead(
-            options.input.agent_id,
+            input.agent_id,
         );
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(
@@ -288,7 +343,15 @@ class DismissNotificationTool
         options: vscode.LanguageModelToolInvocationOptions<DismissNotificationInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { agent_id, notification_id } = options.input;
+        const input = (options.input ?? {}) as Partial<DismissNotificationInput>;
+        const { agent_id, notification_id } = input;
+        if (!agent_id || !notification_id) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { agent_id: string, notification_id: string }",
+                ),
+            ]);
+        }
         const success = await this.bb.dismissNotification(
             agent_id,
             notification_id,

@@ -22,7 +22,15 @@ class RegisterAgentTool implements vscode.LanguageModelTool<RegisterAgentInput> 
         options: vscode.LanguageModelToolInvocationOptions<RegisterAgentInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const { id, name, capabilities } = options.input;
+        const input = (options.input ?? {}) as Partial<RegisterAgentInput>;
+        const { id, name, capabilities } = input;
+        if (!id || !name || !Array.isArray(capabilities)) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { id: string, name: string, capabilities: string[] }",
+                ),
+            ]);
+        }
         const agent = await this.bb.registerAgent({
             id,
             name,
