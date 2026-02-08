@@ -54,6 +54,13 @@ Open the Chat view and message the participant:
 
 You can also invoke the tools directly (the exact tool names are `bb_*`).
 
+### Autonomous agent identity
+
+The extension maintains a default agent identity (persisted per workspace) and will register it on the blackboard when the daemon is connected.
+
+- Tools that accept `agent_id` / `created_by` will default these fields when omitted.
+- If you want a custom identity (e.g., to emulate an external agent), call `bb_register_agent` and then pass that `agent_id` explicitly.
+
 ## Development
 
 ```bash

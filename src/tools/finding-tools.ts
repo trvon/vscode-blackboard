@@ -20,7 +20,7 @@ export type GetCurrentContext = () => string | undefined;
 // ---------------------------------------------------------------------------
 
 interface PostFindingInput {
-    agent_id: string;
+    agent_id?: string;
     topic: string;
     title: string;
     content: string;
@@ -43,6 +43,7 @@ class PostFindingTool implements vscode.LanguageModelTool<PostFindingInput> {
     constructor(
         private readonly bb: YamsBlackboard,
         private readonly getCtx: GetCurrentContext,
+        private readonly defaultAgentId: string,
     ) {}
 
     async invoke(
@@ -50,15 +51,16 @@ class PostFindingTool implements vscode.LanguageModelTool<PostFindingInput> {
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const args = (options.input ?? {}) as Partial<PostFindingInput>;
-        if (!args.agent_id || !args.topic || !args.title || !args.content) {
+        const agentId = args.agent_id || this.defaultAgentId;
+        if (!agentId || !args.topic || !args.title || !args.content) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string, topic: string, title: string, content: string, ... }",
+                    "Invalid input: expected { topic: string, title: string, content: string, agent_id?: string, ... }",
                 ),
             ]);
         }
         const finding = await this.bb.postFinding({
-            agent_id: args.agent_id,
+            agent_id: agentId,
             topic: args.topic as FindingTopic,
             title: args.title,
             content: args.content,
@@ -249,31 +251,35 @@ ${finding.content}`;
 
 interface AcknowledgeFindingInput {
     finding_id: string;
-    agent_id: string;
+    agent_id?: string;
 }
 
 class AcknowledgeFindingTool
     implements vscode.LanguageModelTool<AcknowledgeFindingInput>
 {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<AcknowledgeFindingInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<AcknowledgeFindingInput>;
-        const { finding_id, agent_id } = input;
-        if (!finding_id || !agent_id) {
+        const { finding_id } = input;
+        const agentId = input.agent_id || this.defaultAgentId;
+        if (!finding_id || !agentId) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { finding_id: string, agent_id: string }",
+                    "Invalid input: expected { finding_id: string, agent_id?: string }",
                 ),
             ]);
         }
-        await this.bb.acknowledgeFinding(finding_id, agent_id);
+        await this.bb.acknowledgeFinding(finding_id, agentId);
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(
-                `Finding ${finding_id} acknowledged by ${agent_id}`,
+                `Finding ${finding_id} acknowledged by ${agentId}`,
             ),
         ]);
     }
@@ -285,32 +291,36 @@ class AcknowledgeFindingTool
 
 interface ResolveFindingInput {
     finding_id: string;
-    agent_id: string;
+    agent_id?: string;
     resolution: string;
 }
 
 class ResolveFindingTool
     implements vscode.LanguageModelTool<ResolveFindingInput>
 {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<ResolveFindingInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<ResolveFindingInput>;
-        const { finding_id, agent_id, resolution } = input;
-        if (!finding_id || !agent_id || !resolution) {
+        const { finding_id, resolution } = input;
+        const agentId = input.agent_id || this.defaultAgentId;
+        if (!finding_id || !agentId || !resolution) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { finding_id: string, agent_id: string, resolution: string }",
+                    "Invalid input: expected { finding_id: string, resolution: string, agent_id?: string }",
                 ),
             ]);
         }
-        await this.bb.resolveFinding(finding_id, agent_id, resolution);
+        await this.bb.resolveFinding(finding_id, agentId, resolution);
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(
-                `Finding ${finding_id} resolved by ${agent_id}: ${resolution}`,
+                `Finding ${finding_id} resolved by ${agentId}: ${resolution}`,
             ),
         ]);
     }
@@ -324,13 +334,23 @@ export function registerFindingTools(
     context: vscode.ExtensionContext,
     bb: YamsBlackboard,
     getCtx: GetCurrentContext,
+    defaultAgentId: string,
 ): void {
     context.subscriptions.push(
-        vscode.lm.registerTool("bb_post_finding", new PostFindingTool(bb, getCtx)),
+        vscode.lm.registerTool(
+            "bb_post_finding",
+            new PostFindingTool(bb, getCtx, defaultAgentId),
+        ),
         vscode.lm.registerTool("bb_query_findings", new QueryFindingsTool(bb, getCtx)),
         vscode.lm.registerTool("bb_search_findings", new SearchFindingsTool(bb)),
         vscode.lm.registerTool("bb_get_finding", new GetFindingTool(bb)),
-        vscode.lm.registerTool("bb_acknowledge_finding", new AcknowledgeFindingTool(bb)),
-        vscode.lm.registerTool("bb_resolve_finding", new ResolveFindingTool(bb)),
+        vscode.lm.registerTool(
+            "bb_acknowledge_finding",
+            new AcknowledgeFindingTool(bb, defaultAgentId),
+        ),
+        vscode.lm.registerTool(
+            "bb_resolve_finding",
+            new ResolveFindingTool(bb, defaultAgentId),
+        ),
     );
 }

@@ -121,20 +121,55 @@ export async function activate(
         instanceId,
     });
 
+    // 5b. Establish a default agent identity for autonomous tool usage.
+    // This lets models omit agent_id/created_by in many tool calls.
+    const defaultAgentIdKey = "yamsBlackboard.defaultAgentId";
+    let defaultAgentId = context.workspaceState.get<string>(defaultAgentIdKey);
+    if (!defaultAgentId) {
+        const wsName = vscode.workspace.name
+            ? vscode.workspace.name.replace(/[^a-zA-Z0-9_-]+/g, "-")
+            : "workspace";
+        const machine = (vscode.env.machineId || "").slice(0, 8) || "local";
+        defaultAgentId = `vscode-${wsName}-${machine}`;
+        await context.workspaceState.update(defaultAgentIdKey, defaultAgentId);
+    }
+
+    const defaultAgentName = vscode.workspace.name
+        ? `VS Code (${vscode.workspace.name})`
+        : "VS Code";
+    const defaultAgentCapabilities = ["vscode", "blackboard", "copilot-chat"];
+
+    let defaultAgentRegistered = false;
+    const tryRegisterDefaultAgent = async () => {
+        if (!client?.connected || defaultAgentRegistered) return;
+        try {
+            await bb.registerAgent({
+                id: defaultAgentId!,
+                name: defaultAgentName,
+                capabilities: defaultAgentCapabilities,
+                status: "active",
+            });
+            defaultAgentRegistered = true;
+        } catch {
+            // Best-effort: registration will retry on next successful connect.
+            defaultAgentRegistered = false;
+        }
+    };
+
     // 6. Create shared context state
     const state: ContextState = { currentContextId: undefined };
     const getCtx = () => state.currentContextId;
 
     // 7. Register all tools
     registerAgentTools(context, bb);
-    registerFindingTools(context, bb, getCtx);
-    registerTaskTools(context, bb, getCtx);
+    registerFindingTools(context, bb, getCtx, defaultAgentId);
+    registerTaskTools(context, bb, getCtx, defaultAgentId);
     registerContextTools(context, bb, state);
     registerSearchTools(context, bb);
-    registerNotificationTools(context, bb);
+    registerNotificationTools(context, bb, defaultAgentId);
 
     // 8. Register @blackboard chat participant
-    registerParticipant(context, bb);
+    registerParticipant(context, bb, defaultAgentId);
 
     // 9. Session + connection management
     // IMPORTANT: do not call useSession() on every timer tick.
@@ -163,10 +198,16 @@ export async function activate(
             // If session start fails, allow retry.
             sessionStarted = false;
         });
+
+        // Opportunistically register the default agent once a session is active.
+        void tryRegisterDefaultAgent();
     };
 
     // Initial best-effort session start
     startSessionOnce();
+
+    // Initial best-effort agent registration (may fail if not connected yet)
+    void tryRegisterDefaultAgent();
 
     // Poll connection state to update status bar + attempt connect when daemon starts.
     const poll = setInterval(() => {
@@ -175,12 +216,14 @@ export async function activate(
 
         if (!client.connected) {
             sessionStarted = false;
+            defaultAgentRegistered = false;
             if (!connectInFlight) updateStatusBar("disconnected");
             return;
         }
 
         updateStatusBar("connected");
         startSessionOnce();
+        void tryRegisterDefaultAgent();
     }, 5_000);
     context.subscriptions.push({ dispose: () => clearInterval(poll) });
 

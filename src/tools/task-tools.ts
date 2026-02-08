@@ -17,7 +17,7 @@ interface CreateTaskInput {
     description?: string;
     type: string;
     priority?: number;
-    created_by: string;
+    created_by?: string;
     depends_on?: string[];
     context_id?: string;
 }
@@ -26,6 +26,7 @@ class CreateTaskTool implements vscode.LanguageModelTool<CreateTaskInput> {
     constructor(
         private readonly bb: YamsBlackboard,
         private readonly getCtx: GetCurrentContext,
+        private readonly defaultAgentId: string,
     ) {}
 
     async invoke(
@@ -33,10 +34,11 @@ class CreateTaskTool implements vscode.LanguageModelTool<CreateTaskInput> {
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const args = (options.input ?? {}) as Partial<CreateTaskInput>;
-        if (!args.title || !args.type || !args.created_by) {
+        const createdBy = args.created_by || this.defaultAgentId;
+        if (!args.title || !args.type || !createdBy) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { title: string, type: string, created_by: string, ... }",
+                    "Invalid input: expected { title: string, type: string, created_by?: string, ... }",
                 ),
             ]);
         }
@@ -45,7 +47,7 @@ class CreateTaskTool implements vscode.LanguageModelTool<CreateTaskInput> {
             description: args.description,
             type: args.type as TaskType,
             priority: (args.priority ?? 2) as TaskPriority,
-            created_by: args.created_by,
+            created_by: createdBy,
             depends_on: args.depends_on,
             context_id: args.context_id || this.getCtx(),
         });
@@ -107,22 +109,26 @@ class GetReadyTasksTool implements vscode.LanguageModelTool<GetReadyTasksInput> 
 
 interface ClaimTaskInput {
     task_id: string;
-    agent_id: string;
+    agent_id?: string;
 }
 
 class ClaimTaskTool implements vscode.LanguageModelTool<ClaimTaskInput> {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<ClaimTaskInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<ClaimTaskInput>;
-        const { task_id, agent_id } = input;
+        const task_id = input.task_id;
+        const agent_id = input.agent_id || this.defaultAgentId;
         if (!task_id || !agent_id) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { task_id: string, agent_id: string }",
+                    "Invalid input: expected { task_id: string, agent_id?: string }",
                 ),
             ]);
         }
@@ -373,11 +379,18 @@ export function registerTaskTools(
     context: vscode.ExtensionContext,
     bb: YamsBlackboard,
     getCtx: GetCurrentContext,
+    defaultAgentId: string,
 ): void {
     context.subscriptions.push(
-        vscode.lm.registerTool("bb_create_task", new CreateTaskTool(bb, getCtx)),
+        vscode.lm.registerTool(
+            "bb_create_task",
+            new CreateTaskTool(bb, getCtx, defaultAgentId),
+        ),
         vscode.lm.registerTool("bb_get_ready_tasks", new GetReadyTasksTool(bb)),
-        vscode.lm.registerTool("bb_claim_task", new ClaimTaskTool(bb)),
+        vscode.lm.registerTool(
+            "bb_claim_task",
+            new ClaimTaskTool(bb, defaultAgentId),
+        ),
         vscode.lm.registerTool("bb_update_task", new UpdateTaskTool(bb)),
         vscode.lm.registerTool("bb_complete_task", new CompleteTaskTool(bb)),
         vscode.lm.registerTool("bb_fail_task", new FailTaskTool(bb)),

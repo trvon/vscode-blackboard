@@ -72,7 +72,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id", "topic", "title", "content"],
+          "required": ["topic", "title", "content"],
           "properties": {
             "agent_id": { "type": "string", "description": "Your agent identifier" },
             "topic": { "type": "string", "enum": ["security", "performance", "bug", "architecture", "refactor", "test", "doc", "dependency", "accessibility", "other"], "description": "Category" },
@@ -140,7 +140,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["finding_id", "agent_id"],
+          "required": ["finding_id"],
           "properties": {
             "finding_id": { "type": "string" },
             "agent_id": { "type": "string" }
@@ -154,7 +154,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["finding_id", "agent_id", "resolution"],
+          "required": ["finding_id", "resolution"],
           "properties": {
             "finding_id": { "type": "string" },
             "agent_id": { "type": "string" },
@@ -169,7 +169,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["title", "type", "created_by"],
+          "required": ["title", "type"],
           "properties": {
             "title": { "type": "string" },
             "description": { "type": "string" },
@@ -198,7 +198,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["task_id", "agent_id"],
+          "required": ["task_id"],
           "properties": {
             "task_id": { "type": "string" },
             "agent_id": { "type": "string" }
@@ -341,7 +341,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id", "pattern_type", "pattern_value"],
+          "required": ["pattern_type", "pattern_value"],
           "properties": {
             "agent_id": { "type": "string" },
             "pattern_type": { "type": "string", "enum": ["topic", "entity", "agent", "status", "context"] },
@@ -360,7 +360,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id", "subscription_id"],
+          "required": ["subscription_id"],
           "properties": {
             "agent_id": { "type": "string" },
             "subscription_id": { "type": "string" }
@@ -374,7 +374,6 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id"],
           "properties": { "agent_id": { "type": "string" } }
         }
       },
@@ -385,7 +384,6 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id"],
           "properties": {
             "agent_id": { "type": "string" },
             "limit": { "type": "number" },
@@ -400,7 +398,6 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id"],
           "properties": { "agent_id": { "type": "string" } }
         }
       },
@@ -411,7 +408,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id", "notification_id"],
+          "required": ["notification_id"],
           "properties": {
             "agent_id": { "type": "string" },
             "notification_id": { "type": "string" }
@@ -425,7 +422,6 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id"],
           "properties": { "agent_id": { "type": "string" } }
         }
       },
@@ -436,7 +432,7 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["agent_id", "notification_id"],
+          "required": ["notification_id"],
           "properties": {
             "agent_id": { "type": "string" },
             "notification_id": { "type": "string" }

@@ -13,4 +13,5 @@ buf.yaml
 *.map
 docs/**
 dist-test/**
+.github/**
 

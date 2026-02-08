@@ -12,8 +12,17 @@ import type { YamsBlackboard } from "./blackboard/blackboard.js";
 // System prompt
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You are the YAMS Blackboard assistant. You help users interact with the
+function buildSystemPrompt(defaultAgentId: string): string {
+    return `You are the YAMS Blackboard assistant. You help users interact with the
 multi-agent coordination blackboard built on YAMS.
+
+Autonomous operation guidelines:
+- Treat the user message as a task request and drive the blackboard proactively.
+- Prefer calling tools over asking the user for IDs.
+- You have a default agent identity available: agent_id = "${defaultAgentId}".
+- For tools that accept agent_id/created_by, you may omit them; the host will default them.
+- When you need a snapshot, use bb_stats and/or bb_recent_activity.
+- When creating work, prefer: bb_create_context -> bb_create_task -> bb_claim_task (if applicable) -> bb_post_finding.
 
 You have access to the following tool families (all prefixed with "bb_"):
 
@@ -27,6 +36,7 @@ You have access to the following tool families (all prefixed with "bb_"):
 When users ask about blackboard state, invoke the appropriate tool(s) and present the results clearly.
 When the query is ambiguous, prefer showing a summary (bb_stats or bb_recent_activity) first.
 Always be concise and format output for readability.`;
+}
 
 // ---------------------------------------------------------------------------
 // Tool names we want the model to have access to
@@ -70,6 +80,7 @@ const BB_TOOL_NAMES = [
 
 async function handleRequest(
     bb: YamsBlackboard,
+    defaultAgentId: string,
     request: vscode.ChatRequest,
     _context: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
@@ -98,8 +109,15 @@ async function handleRequest(
     );
 
     // Assemble messages
+    const systemPrompt = buildSystemPrompt(defaultAgentId);
+    const asSystem = (vscode.LanguageModelChatMessage as any).System;
+    const systemMessage =
+        typeof asSystem === "function"
+            ? asSystem(systemPrompt)
+            : vscode.LanguageModelChatMessage.User(systemPrompt);
+
     const messages = [
-        vscode.LanguageModelChatMessage.User(SYSTEM_PROMPT),
+        systemMessage,
         vscode.LanguageModelChatMessage.User(request.prompt),
     ];
 
@@ -201,11 +219,12 @@ async function handleRequest(
 export function registerParticipant(
     context: vscode.ExtensionContext,
     bb: YamsBlackboard,
+    defaultAgentId: string,
 ): void {
     const participant = vscode.chat.createChatParticipant(
         "blackboard",
         (request, chatContext, stream, token) =>
-            handleRequest(bb, request, chatContext, stream, token),
+            handleRequest(bb, defaultAgentId, request, chatContext, stream, token),
     );
 
     participant.iconPath = new vscode.ThemeIcon("circuit-board");

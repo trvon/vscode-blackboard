@@ -13,7 +13,7 @@ import type { FindingSeverity } from "../blackboard/types.js";
 // ---------------------------------------------------------------------------
 
 interface SubscribeInput {
-    agent_id: string;
+    agent_id?: string;
     pattern_type: string;
     pattern_value: string;
     severity_filter?: string[];
@@ -23,17 +23,21 @@ interface SubscribeInput {
 }
 
 class SubscribeTool implements vscode.LanguageModelTool<SubscribeInput> {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<SubscribeInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const args = (options.input ?? {}) as Partial<SubscribeInput>;
-        if (!args.agent_id || !args.pattern_type || !args.pattern_value) {
+        const agentId = args.agent_id || this.defaultAgentId;
+        if (!agentId || !args.pattern_type || !args.pattern_value) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string, pattern_type: string, pattern_value: string, ... }",
+                    "Invalid input: expected { pattern_type: string, pattern_value: string, agent_id?: string, ... }",
                 ),
             ]);
         }
@@ -44,7 +48,7 @@ class SubscribeTool implements vscode.LanguageModelTool<SubscribeInput> {
             : undefined;
 
         const subscription = await this.bb.createSubscription({
-            subscriber_id: args.agent_id,
+            subscriber_id: agentId,
             pattern_type: args.pattern_type as any,
             pattern_value: args.pattern_value,
             filters: {
@@ -74,23 +78,27 @@ Use bb_check_notifications to see matching events.`;
 // ---------------------------------------------------------------------------
 
 interface UnsubscribeInput {
-    agent_id: string;
+    agent_id?: string;
     subscription_id: string;
 }
 
 class UnsubscribeTool implements vscode.LanguageModelTool<UnsubscribeInput> {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<UnsubscribeInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<UnsubscribeInput>;
-        const { agent_id, subscription_id } = input;
+        const subscription_id = input.subscription_id;
+        const agent_id = input.agent_id || this.defaultAgentId;
         if (!agent_id || !subscription_id) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string, subscription_id: string }",
+                    "Invalid input: expected { subscription_id: string, agent_id?: string }",
                 ),
             ]);
         }
@@ -109,28 +117,32 @@ class UnsubscribeTool implements vscode.LanguageModelTool<UnsubscribeInput> {
 // ---------------------------------------------------------------------------
 
 interface ListSubscriptionsInput {
-    agent_id: string;
+    agent_id?: string;
 }
 
 class ListSubscriptionsTool
     implements vscode.LanguageModelTool<ListSubscriptionsInput>
 {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<ListSubscriptionsInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<ListSubscriptionsInput>;
-        if (!input.agent_id) {
+        const agentId = input.agent_id || this.defaultAgentId;
+        if (!agentId) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string }",
+                    "Invalid input: expected { agent_id?: string }",
                 ),
             ]);
         }
         const subscriptions = await this.bb.listSubscriptions(
-            input.agent_id,
+            agentId,
         );
 
         if (subscriptions.length === 0) {
@@ -157,7 +169,7 @@ class ListSubscriptionsTool
 // ---------------------------------------------------------------------------
 
 interface CheckNotificationsInput {
-    agent_id: string;
+    agent_id?: string;
     limit?: number;
     mark_as_read?: boolean;
 }
@@ -165,18 +177,22 @@ interface CheckNotificationsInput {
 class CheckNotificationsTool
     implements vscode.LanguageModelTool<CheckNotificationsInput>
 {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<CheckNotificationsInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<CheckNotificationsInput>;
-        const { agent_id, limit, mark_as_read } = input;
+        const agent_id = input.agent_id || this.defaultAgentId;
+        const { limit, mark_as_read } = input;
         if (!agent_id) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string, limit?: number, mark_as_read?: boolean }",
+                    "Invalid input: expected { limit?: number, mark_as_read?: boolean, agent_id?: string }",
                 ),
             ]);
         }
@@ -220,28 +236,32 @@ ${items.join("\n\n")}${mark_as_read ? "\n\n(Marked as read)" : ""}`;
 // ---------------------------------------------------------------------------
 
 interface NotificationCountInput {
-    agent_id: string;
+    agent_id?: string;
 }
 
 class NotificationCountTool
     implements vscode.LanguageModelTool<NotificationCountInput>
 {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<NotificationCountInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<NotificationCountInput>;
-        if (!input.agent_id) {
+        const agentId = input.agent_id || this.defaultAgentId;
+        if (!agentId) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string }",
+                    "Invalid input: expected { agent_id?: string }",
                 ),
             ]);
         }
         const counts = await this.bb.getNotificationCount(
-            input.agent_id,
+            agentId,
         );
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(
@@ -256,25 +276,29 @@ class NotificationCountTool
 // ---------------------------------------------------------------------------
 
 interface MarkNotificationReadInput {
-    agent_id: string;
+    agent_id?: string;
     notification_id: string;
 }
 
 class MarkNotificationReadTool
     implements vscode.LanguageModelTool<MarkNotificationReadInput>
 {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<MarkNotificationReadInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<MarkNotificationReadInput>;
-        const { agent_id, notification_id } = input;
+        const notification_id = input.notification_id;
+        const agent_id = input.agent_id || this.defaultAgentId;
         if (!agent_id || !notification_id) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string, notification_id: string }",
+                    "Invalid input: expected { notification_id: string, agent_id?: string }",
                 ),
             ]);
         }
@@ -296,26 +320,30 @@ class MarkNotificationReadTool
 // ---------------------------------------------------------------------------
 
 interface MarkAllReadInput {
-    agent_id: string;
+    agent_id?: string;
 }
 
 class MarkAllReadTool implements vscode.LanguageModelTool<MarkAllReadInput> {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<MarkAllReadInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<MarkAllReadInput>;
-        if (!input.agent_id) {
+        const agentId = input.agent_id || this.defaultAgentId;
+        if (!agentId) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string }",
+                    "Invalid input: expected { agent_id?: string }",
                 ),
             ]);
         }
         const count = await this.bb.markAllNotificationsRead(
-            input.agent_id,
+            agentId,
         );
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(
@@ -330,25 +358,29 @@ class MarkAllReadTool implements vscode.LanguageModelTool<MarkAllReadInput> {
 // ---------------------------------------------------------------------------
 
 interface DismissNotificationInput {
-    agent_id: string;
+    agent_id?: string;
     notification_id: string;
 }
 
 class DismissNotificationTool
     implements vscode.LanguageModelTool<DismissNotificationInput>
 {
-    constructor(private readonly bb: YamsBlackboard) {}
+    constructor(
+        private readonly bb: YamsBlackboard,
+        private readonly defaultAgentId: string,
+    ) {}
 
     async invoke(
         options: vscode.LanguageModelToolInvocationOptions<DismissNotificationInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<DismissNotificationInput>;
-        const { agent_id, notification_id } = input;
+        const notification_id = input.notification_id;
+        const agent_id = input.agent_id || this.defaultAgentId;
         if (!agent_id || !notification_id) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { agent_id: string, notification_id: string }",
+                    "Invalid input: expected { notification_id: string, agent_id?: string }",
                 ),
             ]);
         }
@@ -372,30 +404,40 @@ class DismissNotificationTool
 export function registerNotificationTools(
     context: vscode.ExtensionContext,
     bb: YamsBlackboard,
+    defaultAgentId: string,
 ): void {
     context.subscriptions.push(
-        vscode.lm.registerTool("bb_subscribe", new SubscribeTool(bb)),
-        vscode.lm.registerTool("bb_unsubscribe", new UnsubscribeTool(bb)),
+        vscode.lm.registerTool(
+            "bb_subscribe",
+            new SubscribeTool(bb, defaultAgentId),
+        ),
+        vscode.lm.registerTool(
+            "bb_unsubscribe",
+            new UnsubscribeTool(bb, defaultAgentId),
+        ),
         vscode.lm.registerTool(
             "bb_list_subscriptions",
-            new ListSubscriptionsTool(bb),
+            new ListSubscriptionsTool(bb, defaultAgentId),
         ),
         vscode.lm.registerTool(
             "bb_check_notifications",
-            new CheckNotificationsTool(bb),
+            new CheckNotificationsTool(bb, defaultAgentId),
         ),
         vscode.lm.registerTool(
             "bb_notification_count",
-            new NotificationCountTool(bb),
+            new NotificationCountTool(bb, defaultAgentId),
         ),
         vscode.lm.registerTool(
             "bb_mark_notification_read",
-            new MarkNotificationReadTool(bb),
+            new MarkNotificationReadTool(bb, defaultAgentId),
         ),
-        vscode.lm.registerTool("bb_mark_all_read", new MarkAllReadTool(bb)),
+        vscode.lm.registerTool(
+            "bb_mark_all_read",
+            new MarkAllReadTool(bb, defaultAgentId),
+        ),
         vscode.lm.registerTool(
             "bb_dismiss_notification",
-            new DismissNotificationTool(bb),
+            new DismissNotificationTool(bb, defaultAgentId),
         ),
     );
 }
