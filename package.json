@@ -1,0 +1,456 @@
+{
+  "name": "vscode-blackboard",
+  "displayName": "YAMS Blackboard",
+  "description": "Multi-agent coordination via YAMS blackboard — post findings, claim tasks, and discover agent work through direct daemon IPC.",
+  "version": "0.1.0",
+  "publisher": "trvon",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trvon/vscode-blackboard.git"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "proto:generate": "npx buf generate",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package"
+  },
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "blackboard",
+        "name": "blackboard",
+        "fullName": "YAMS Blackboard",
+        "description": "Multi-agent coordination — search findings, manage tasks, and explore blackboard state.",
+        "isSticky": false
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "bb_register_agent",
+        "displayName": "Register Agent",
+        "description": "Register an agent's identity and capabilities on the blackboard. Call this when starting work to announce your presence.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["id", "name", "capabilities"],
+          "properties": {
+            "id": { "type": "string", "description": "Unique agent identifier" },
+            "name": { "type": "string", "description": "Human-readable name" },
+            "capabilities": { "type": "array", "items": { "type": "string" }, "description": "List of capabilities" }
+          }
+        }
+      },
+      {
+        "name": "bb_list_agents",
+        "displayName": "List Agents",
+        "description": "List all registered agents and their capabilities",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": { "type": "object", "properties": {} }
+      },
+      {
+        "name": "bb_post_finding",
+        "displayName": "Post Finding",
+        "description": "Post a finding to the shared blackboard for other agents to discover. Use this to share discoveries, observations, issues, or insights.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id", "topic", "title", "content"],
+          "properties": {
+            "agent_id": { "type": "string", "description": "Your agent identifier" },
+            "topic": { "type": "string", "enum": ["security", "performance", "bug", "architecture", "refactor", "test", "doc", "dependency", "accessibility", "other"], "description": "Category" },
+            "title": { "type": "string", "description": "Brief summary of the finding" },
+            "content": { "type": "string", "description": "Full details in markdown" },
+            "confidence": { "type": "number", "description": "Confidence level 0-1" },
+            "severity": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"], "description": "Impact level" },
+            "references": { "type": "array", "items": { "type": "object", "properties": { "type": { "type": "string", "enum": ["file", "url", "finding", "task", "symbol"] }, "target": { "type": "string" }, "label": { "type": "string" }, "line_start": { "type": "number" }, "line_end": { "type": "number" } }, "required": ["type", "target"] } },
+            "context_id": { "type": "string", "description": "Group with related findings" },
+            "parent_id": { "type": "string", "description": "Reply to another finding" },
+            "scope": { "type": "string", "enum": ["session", "persistent"], "description": "Persistence scope" },
+            "metadata": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Additional key-value metadata" }
+          }
+        }
+      },
+      {
+        "name": "bb_query_findings",
+        "displayName": "Query Findings",
+        "description": "Query findings from the blackboard by topic, agent, severity, or context. Use to discover what other agents have found.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "topic": { "type": "string", "enum": ["security", "performance", "bug", "architecture", "refactor", "test", "doc", "dependency", "accessibility", "other"] },
+            "agent_id": { "type": "string" },
+            "context_id": { "type": "string" },
+            "status": { "type": "string", "enum": ["draft", "published", "acknowledged", "resolved", "rejected"] },
+            "severity": { "type": "array", "items": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] } },
+            "min_confidence": { "type": "number" },
+            "scope": { "type": "string", "enum": ["session", "persistent"] },
+            "limit": { "type": "number" }
+          }
+        }
+      },
+      {
+        "name": "bb_search_findings",
+        "displayName": "Search Findings",
+        "description": "Search findings using natural language. Uses semantic search to find relevant findings.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["query"],
+          "properties": {
+            "query": { "type": "string", "description": "Natural language search query" },
+            "topic": { "type": "string", "enum": ["security", "performance", "bug", "architecture", "refactor", "test", "doc", "dependency", "accessibility", "other"] },
+            "limit": { "type": "number" }
+          }
+        }
+      },
+      {
+        "name": "bb_get_finding",
+        "displayName": "Get Finding",
+        "description": "Get full details of a specific finding by ID",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["finding_id"],
+          "properties": { "finding_id": { "type": "string" } }
+        }
+      },
+      {
+        "name": "bb_acknowledge_finding",
+        "displayName": "Acknowledge Finding",
+        "description": "Mark a finding as acknowledged (you've seen it)",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["finding_id", "agent_id"],
+          "properties": {
+            "finding_id": { "type": "string" },
+            "agent_id": { "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "bb_resolve_finding",
+        "displayName": "Resolve Finding",
+        "description": "Mark a finding as resolved with an explanation",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["finding_id", "agent_id", "resolution"],
+          "properties": {
+            "finding_id": { "type": "string" },
+            "agent_id": { "type": "string" },
+            "resolution": { "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "bb_create_task",
+        "displayName": "Create Task",
+        "description": "Create a new task on the blackboard for agents to claim and work on",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["title", "type", "created_by"],
+          "properties": {
+            "title": { "type": "string" },
+            "description": { "type": "string" },
+            "type": { "type": "string", "enum": ["analysis", "fix", "review", "test", "research", "synthesis"] },
+            "priority": { "type": "number", "enum": [0, 1, 2, 3, 4] },
+            "created_by": { "type": "string" },
+            "depends_on": { "type": "array", "items": { "type": "string" } },
+            "context_id": { "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "bb_get_ready_tasks",
+        "displayName": "Get Ready Tasks",
+        "description": "Get tasks that are ready to work on (pending, no unmet dependencies). Use this to find work.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": { "limit": { "type": "number" } }
+        }
+      },
+      {
+        "name": "bb_claim_task",
+        "displayName": "Claim Task",
+        "description": "Claim a pending task to work on it",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["task_id", "agent_id"],
+          "properties": {
+            "task_id": { "type": "string" },
+            "agent_id": { "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "bb_update_task",
+        "displayName": "Update Task",
+        "description": "Update the status of a task you're working on",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["task_id", "status"],
+          "properties": {
+            "task_id": { "type": "string" },
+            "status": { "type": "string", "enum": ["pending", "claimed", "working", "blocked", "review", "completed", "failed", "cancelled"] },
+            "error": { "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "bb_complete_task",
+        "displayName": "Complete Task",
+        "description": "Mark a task as completed, optionally with findings or artifacts",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["task_id"],
+          "properties": {
+            "task_id": { "type": "string" },
+            "findings": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      {
+        "name": "bb_fail_task",
+        "displayName": "Fail Task",
+        "description": "Mark a task as failed with an error message",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["task_id", "error"],
+          "properties": {
+            "task_id": { "type": "string" },
+            "error": { "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "bb_query_tasks",
+        "displayName": "Query Tasks",
+        "description": "Query tasks by type, status, priority, or assignee",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["analysis", "fix", "review", "test", "research", "synthesis"] },
+            "status": { "type": "string", "enum": ["pending", "claimed", "working", "blocked", "review", "completed", "failed", "cancelled"] },
+            "priority": { "type": "number", "enum": [0, 1, 2, 3, 4] },
+            "created_by": { "type": "string" },
+            "assigned_to": { "type": "string" },
+            "context_id": { "type": "string" },
+            "limit": { "type": "number" }
+          }
+        }
+      },
+      {
+        "name": "bb_create_context",
+        "displayName": "Create Context",
+        "description": "Create a new context to group related findings and tasks together",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["id", "name"],
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "set_current": { "type": "boolean" }
+          }
+        }
+      },
+      {
+        "name": "bb_get_context_summary",
+        "displayName": "Get Context Summary",
+        "description": "Get a summary of a context including findings, tasks, and agents",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": { "context_id": { "type": "string" } }
+        }
+      },
+      {
+        "name": "bb_set_context",
+        "displayName": "Set Context",
+        "description": "Set the current working context for findings and tasks",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["context_id"],
+          "properties": { "context_id": { "type": "string" } }
+        }
+      },
+      {
+        "name": "bb_recent_activity",
+        "displayName": "Recent Activity",
+        "description": "Get recent findings and task updates across all topics",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": { "limit": { "type": "number" } }
+        }
+      },
+      {
+        "name": "bb_stats",
+        "displayName": "Blackboard Stats",
+        "description": "Get statistics about the blackboard (agents, findings, tasks)",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": { "type": "object", "properties": {} }
+      },
+      {
+        "name": "bb_connections",
+        "displayName": "Explore Connections",
+        "description": "Explore graph connections for a finding or document - see related code, findings, and concepts",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["path"],
+          "properties": {
+            "path": { "type": "string", "description": "Path to the entity" },
+            "depth": { "type": "number" }
+          }
+        }
+      },
+      {
+        "name": "bb_subscribe",
+        "displayName": "Subscribe",
+        "description": "Subscribe to blackboard events matching a pattern. Get notified when findings/tasks matching your criteria are created or updated.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id", "pattern_type", "pattern_value"],
+          "properties": {
+            "agent_id": { "type": "string" },
+            "pattern_type": { "type": "string", "enum": ["topic", "entity", "agent", "status", "context"] },
+            "pattern_value": { "type": "string" },
+            "severity_filter": { "type": "array", "items": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] } },
+            "min_confidence": { "type": "number" },
+            "exclude_self": { "type": "boolean" },
+            "expires_in_hours": { "type": "number" }
+          }
+        }
+      },
+      {
+        "name": "bb_unsubscribe",
+        "displayName": "Unsubscribe",
+        "description": "Cancel an active subscription",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id", "subscription_id"],
+          "properties": {
+            "agent_id": { "type": "string" },
+            "subscription_id": { "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "bb_list_subscriptions",
+        "displayName": "List Subscriptions",
+        "description": "List your active subscriptions",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id"],
+          "properties": { "agent_id": { "type": "string" } }
+        }
+      },
+      {
+        "name": "bb_check_notifications",
+        "displayName": "Check Notifications",
+        "description": "Check your notification mailbox for new events.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id"],
+          "properties": {
+            "agent_id": { "type": "string" },
+            "limit": { "type": "number" },
+            "mark_as_read": { "type": "boolean" }
+          }
+        }
+      },
+      {
+        "name": "bb_notification_count",
+        "displayName": "Notification Count",
+        "description": "Quick count of unread notifications without fetching details",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id"],
+          "properties": { "agent_id": { "type": "string" } }
+        }
+      },
+      {
+        "name": "bb_mark_notification_read",
+        "displayName": "Mark Notification Read",
+        "description": "Mark a specific notification as read",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id", "notification_id"],
+          "properties": {
+            "agent_id": { "type": "string" },
+            "notification_id": { "type": "string" }
+          }
+        }
+      },
+      {
+        "name": "bb_mark_all_read",
+        "displayName": "Mark All Read",
+        "description": "Mark all notifications as read",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id"],
+          "properties": { "agent_id": { "type": "string" } }
+        }
+      },
+      {
+        "name": "bb_dismiss_notification",
+        "displayName": "Dismiss Notification",
+        "description": "Dismiss a notification permanently (won't show in future queries)",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": ["agent_id", "notification_id"],
+          "properties": {
+            "agent_id": { "type": "string" },
+            "notification_id": { "type": "string" }
+          }
+        }
+      }
+    ]
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.3",
+    "crc-32": "^1.2.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.47.2",
+    "@bufbuild/protoc-gen-es": "^2.2.3",
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.95.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  }
+}

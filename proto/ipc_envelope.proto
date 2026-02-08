@@ -1,0 +1,1149 @@
+syntax = "proto3";
+
+package yams.daemon.ipc;
+
+// NOTE: Transport/framing (CRC, chunk flags) stays outside protobuf. We include request_id
+// here to ease removal of the legacy IPC protocol header.
+
+// COMMON TYPES
+message KvPair { string key = 1; string value = 2; }
+message StringList { repeated string values = 1; }
+
+// REQUESTS
+message PingRequest { uint64 timestamp_ns = 1; }
+
+message SearchRequest {
+  string query = 1;
+  uint32 limit = 2;
+  bool fuzzy = 3;
+  bool literal_text = 4;
+  double similarity = 5;
+  int64 timeout_ms = 6;
+  string search_type = 7;
+  bool paths_only = 8;
+  bool show_hash = 9;
+  bool verbose = 10;
+  bool json_output = 11;
+  bool show_line_numbers = 12;
+  int32 after_context = 13;
+  int32 before_context = 14;
+  int32 context = 15;
+  string hash_query = 16;
+  // Engine-level filtering parity with CLI/local service
+  string path_pattern = 17;
+  repeated string path_patterns = 34;  // Multiple glob patterns for server-side filtering
+  repeated string tags = 18;
+  bool match_all_tags = 19;
+  string extension = 20;
+  string mime_type = 21;
+  string file_type = 22;
+  bool text_only = 23;
+  bool binary_only = 24;
+  string created_after = 25;
+  string created_before = 26;
+  string modified_after = 27;
+  string modified_before = 28;
+  string indexed_after = 29;
+  string indexed_before = 30;
+  int32 vector_stage_timeout_ms = 31;
+  int32 keyword_stage_timeout_ms = 32;
+  int32 snippet_hydration_timeout_ms = 33;
+  string session_id = 99;
+  string instance_id = 100;
+}
+
+message GetRequest {
+  string hash = 1;
+  string name = 2;
+  bool by_name = 3;
+  string file_type = 4;
+  string mime_type = 5;
+  string extension = 6;
+  bool binary_only = 7;
+  bool text_only = 8;
+  string created_after = 9;
+  string created_before = 10;
+  string modified_after = 11;
+  string modified_before = 12;
+  string indexed_after = 13;
+  string indexed_before = 14;
+  bool latest = 15;
+  bool oldest = 16;
+  string output_path = 17;
+  bool metadata_only = 18;
+  uint64 max_bytes = 19;
+  uint32 chunk_size = 20;
+  bool raw = 21;
+  bool extract = 22;
+  bool show_graph = 23;
+  int32 graph_depth = 24;
+  bool verbose = 25;
+  bool accept_compressed = 40;
+}
+
+message GetInitRequest {
+  string hash = 1;
+  string name = 2;
+  bool by_name = 3;
+  bool metadata_only = 4;
+  uint64 max_bytes = 5;
+  uint32 chunk_size = 6;
+}
+
+message GetChunkRequest {
+  uint64 transfer_id = 1;
+  uint64 offset = 2;
+  uint32 length = 3;
+}
+
+message GetEndRequest { uint64 transfer_id = 1; }
+
+message DeleteRequest {
+  string hash = 1;
+  string name = 2;
+  repeated string names = 3;
+  string pattern = 4;
+  string directory = 5;
+  bool purge = 6;
+  bool force = 7;
+  bool dry_run = 8;
+  bool keep_refs = 9;
+  bool recursive = 10;
+  bool verbose = 11;
+  string session_id = 99;
+  string instance_id = 100;
+}
+
+message ListRequest {
+  uint32 limit = 1;
+  int32 offset = 2;
+  int32 recent_count = 3;
+  bool recent = 4;
+  string format = 5;
+  string sort_by = 6;
+  bool reverse = 7;
+  bool verbose = 8;
+  bool show_snippets = 9;
+  bool show_metadata = 10;
+  bool show_tags = 11;
+  bool group_by_session = 12;
+  int32 snippet_length = 13;
+  bool no_snippets = 14;
+  string file_type = 15;
+  string mime_type = 16;
+  string extensions = 17;
+  bool binary_only = 18;
+  bool text_only = 19;
+  string created_after = 20;
+  string created_before = 21;
+  string modified_after = 22;
+  string modified_before = 23;
+  string indexed_after = 24;
+  string indexed_before = 25;
+  bool show_changes = 26;
+  string since_time = 27;
+  bool show_diff_tags = 28;
+  bool show_deleted = 29;
+  string change_window = 30;
+  repeated string tags = 31;
+  string filter_tags = 32;
+  bool match_all_tags = 33;
+  string name_pattern = 34;
+  bool paths_only = 35;
+  // Metadata key-value filters (e.g., pbi=PBI-080, task=hook-export)
+  repeated KvPair metadata_filters = 36;
+  bool match_all_metadata = 37;
+  string session_id = 99;
+  string instance_id = 100;
+}
+
+message ShutdownRequest { bool graceful = 1; int64 timeout_s = 2; }
+message StatusRequest { bool detailed = 1; }
+
+message GenerateEmbeddingRequest { string text = 1; string model_name = 2; bool normalize = 3; }
+message BatchEmbeddingRequest {
+  repeated string texts = 1;
+  string model_name = 2;
+  bool normalize = 3;
+  uint32 batch_size = 4;
+}
+message LoadModelRequest { string model_name = 1; bool preload = 2; string options_json = 3; }
+message UnloadModelRequest { string model_name = 1; bool force = 2; }
+message ModelStatusRequest { string model_name = 1; bool detailed = 2; }
+
+// Embed specific documents by hash and persist into vectors.db
+message EmbedDocumentsRequest {
+  repeated string document_hashes = 1;
+  string model_name = 2;
+  bool normalize = 3;
+  uint32 batch_size = 4;
+  bool skip_existing = 5;
+}
+
+// Plugin management
+message PluginRecord {
+  string name = 1;
+  string version = 2;
+  uint32 abi_version = 3;
+  string path = 4;
+  string manifest_json = 5;
+  repeated string interfaces = 6;
+}
+
+message PluginScanRequest { string dir = 1; string target = 2; }
+message PluginLoadRequest { string path_or_name = 1; string config_json = 2; bool dry_run = 3; }
+message PluginUnloadRequest { string name = 1; }
+message PluginTrustListRequest {}
+message PluginTrustAddRequest { string path = 1; }
+message PluginTrustRemoveRequest { string path = 1; }
+
+message AddDocumentRequest {
+  string path = 1;
+  string content = 2;
+  string name = 3;
+  repeated string tags = 4;
+  repeated KvPair metadata = 5;
+  bool recursive = 6;
+  bool include_hidden = 7;
+  repeated string include_patterns = 8;
+  repeated string exclude_patterns = 9;
+  string collection = 10;
+  string snapshot_id = 11;
+  string snapshot_label = 12;
+  string mime_type = 13;
+  bool disable_auto_mime = 14;
+  bool no_embeddings = 15;
+  string session_id = 99;
+  string instance_id = 100;
+}
+
+message GrepRequest {
+  string pattern = 1;
+  string path = 2;
+  repeated string paths = 3;
+  bool case_insensitive = 4;
+  bool invert_match = 5;
+  int32 context_lines = 6;
+  uint64 max_matches = 7;
+  repeated string include_patterns = 8;
+  bool recursive = 9;
+  bool whole_word = 10;
+  bool show_line_numbers = 11;
+  bool show_filename = 12;
+  bool no_filename = 13;
+  bool count_only = 14;
+  bool files_only = 15;
+  bool files_without_match = 16;
+  bool paths_only = 17;
+  bool literal_text = 18;
+  bool regex_only = 19;
+  uint64 semantic_limit = 20;
+  repeated string filter_tags = 21;
+  bool match_all_tags = 22;
+  string color_mode = 23;
+  int32 before_context = 24;
+  int32 after_context = 25;
+  bool show_diff = 26;
+  string session_id = 99;
+  string instance_id = 100;
+}
+
+// ---------------------------------------------------------------------------
+// Path‑tree (hierarchical) search request/response.
+// This is a lightweight RPC that returns aggregated document counts for a
+// given prefix and optionally the top‑N child nodes. It is used by the new
+// RetrievalService::pathTreeGrep implementation (option B).
+// ---------------------------------------------------------------------------
+message PathTreeRequest {
+  // The normalized prefix to query – must be an absolute path (e.g. "/project/src").
+  string prefix = 1;
+  // Maximum number of child entries to return. Zero means only the node stats.
+  uint64 child_limit = 2;
+}
+
+message PathTreeNode {
+  // Full path of the node (including the prefix and the child segment).
+  string full_path = 1;
+  // Number of documents indexed under this node (including its subtree).
+  int64 doc_count = 2;
+  // Optional centroid vector for the node – stored as raw bytes (float array).
+  bytes centroid = 3;
+}
+
+message PathTreeResponse {
+  // Document count for the requested prefix node.
+  int64 doc_count = 1;
+  // Optional centroid for the prefix node.
+  bytes centroid = 2;
+  // Top‑N child nodes ordered by doc_count (if child_limit > 0).
+  repeated PathTreeNode top_children = 3;
+}
+
+message UpdateDocumentRequest {
+  string hash = 1;
+  string name = 2;
+  string new_content = 3;
+  repeated string add_tags = 4;
+  repeated string remove_tags = 5;
+  repeated KvPair metadata = 6;
+  bool atomic = 7;
+  bool create_backup = 8;
+  bool verbose = 9;
+  string session_id = 99;
+}
+
+message DownloadRequest {
+  string url = 1;
+  string output_path = 2;
+  repeated string tags = 3;
+  repeated KvPair metadata = 4;
+  bool quiet = 5;
+  string session_id = 99;
+}
+
+message GetStatsRequest {
+  bool detailed = 1;
+  bool include_cache = 2;
+  bool show_file_types = 3;
+  bool show_compression = 4;
+  bool show_duplicates = 5;
+  bool show_dedup = 6;
+  bool show_performance = 7;
+  bool include_health = 8;
+  string session_id = 99;
+}
+
+// Session preparation (warming) with resource budgets
+message PrepareSessionRequest {
+  string session_name = 1; // optional; empty means current session
+  int32 cores = 2;         // -1 for default
+  int32 memory_gb = 3;     // -1 for default
+  int64 time_ms = 4;       // -1 for default
+  bool aggressive = 5;
+  uint64 limit = 6;        // max docs per selector
+  uint32 snippet_len = 7;  // snippet length
+}
+
+// RESPONSES
+message SuccessResponse { string message = 1; }
+message ErrorResponse { uint32 code = 1; string message = 2; }
+message PongResponse { uint64 server_time_ns = 1; int64 round_trip_ms = 2; }
+
+message SearchResult {
+  string id = 1;
+  string path = 2;
+  string title = 3;
+  string snippet = 4;
+  double score = 5;
+  repeated KvPair metadata = 6;
+}
+
+message SearchResponse {
+  repeated SearchResult results = 1;
+  uint64 total_count = 2;
+  int64 elapsed_ms = 3;
+}
+
+message AddResponse {
+  string hash = 1;
+  uint64 bytes_stored = 2;
+  uint64 bytes_deduped = 3;
+  double dedup_ratio = 4;
+}
+
+message GetResponse {
+  string hash = 1;
+  bool compressed = 10;
+  optional uint32 compression_algorithm = 11;
+  optional uint32 compression_level = 12;
+  optional uint64 uncompressed_size = 13;
+  optional uint32 compressed_crc32 = 14;
+  optional uint32 uncompressed_crc32 = 15;
+  bytes compression_header = 16;
+  optional uint32 centroid_weight = 17;
+  optional uint32 centroid_dims = 18;
+  repeated float centroid_preview = 19;
+  string name = 2;
+  string path = 3;
+  bytes content = 4; // for small responses
+  repeated KvPair metadata = 5;
+  bool has_content = 6; // indicates if content field is populated
+}
+
+message GetInitResponse {
+  uint64 transfer_id = 1;
+  uint64 total_size = 2;
+  uint32 chunk_size = 3;
+  repeated KvPair metadata = 4;
+}
+
+message GetChunkResponse { bytes data = 1; uint64 bytes_remaining = 2; }
+
+message ListEntry {
+  string hash = 1;
+  string path = 2;
+  string name = 3;
+  string file_name = 4;
+  uint64 size = 5;
+  string mime_type = 6;
+  string file_type = 7;
+  string extension = 8;
+  int64 created = 9;
+  int64 modified = 10;
+  int64 indexed = 11;
+  string snippet = 12;
+  string language = 13;
+  string extraction_method = 14;
+  repeated string tags = 15;
+  repeated KvPair metadata = 16;
+  string change_type = 17;
+  int64 change_time = 18;
+  double relevance_score = 19;
+  string match_reason = 20;
+  string extraction_status = 21;
+}
+
+message ListResponse { repeated ListEntry items = 1; uint64 total_count = 2; }
+
+message StatusResponse {
+  string state = 1; // textual summary; details TBD
+  // Extended runtime fields (proto v2+)
+  bool running = 2;
+  bool ready = 3;
+  uint64 uptime_seconds = 4;
+  uint64 requests_processed = 5;
+  uint64 active_connections = 6;
+  double memory_mb = 7;
+  double cpu_pct = 8;
+  string version = 9;
+  // Additional health optics (v3)
+  // Key/value pairs to transport maps without introducing proto map types here
+  // readiness: key=subsystem, value="true"|"false"
+  repeated KvPair readiness = 10;
+  // progress: key=subsystem, value="0..100"
+  repeated KvPair progress = 11;
+  // overall lifecycle: "ready"|"degraded"|"initializing"|"starting"|"stopped"
+  string overall_status = 12;
+  // request_counts: key=request name, value=count
+  repeated KvPair request_counts = 13;
+  // Typed provider details (preferred by clients over JSON snapshots)
+  message ProviderInfo {
+    string name = 1;
+    bool ready = 2;
+    bool degraded = 3;
+    string error = 4;
+    uint32 models_loaded = 5;
+    bool is_provider = 6;
+    repeated string interfaces = 7;    // plugin interfaces (e.g., content_extractor_v1)
+    repeated string capabilities = 8;  // capability categories (e.g., content_extraction)
+  }
+  repeated ProviderInfo providers = 14;
+  message SkippedPlugin { string path = 1; string reason = 2; }
+  repeated SkippedPlugin skipped = 15;
+  // PostIngestQueue depth for FTS5 readiness checks (PBI-040)
+  uint32 post_ingest_queue_depth = 16;
+}
+
+message EmbeddingResponse {
+  repeated float embedding = 1;
+  uint64 dimensions = 2;
+  string model_used = 3;
+  uint32 processing_time_ms = 4;
+}
+
+message BatchEmbeddingResponse {
+  repeated EmbeddingResponse embeddings = 1;
+  uint64 dimensions = 2;
+  string model_used = 3;
+  uint32 processing_time_ms = 4;
+  uint64 success_count = 5;
+  uint64 failure_count = 6;
+}
+
+// Streaming progress events (embeddings/model load)
+message EmbedEvent {
+  string model_name = 1;
+  uint64 processed = 2;
+  uint64 total = 3;
+  uint64 success = 4;
+  uint64 failure = 5;
+  uint64 inserted = 6; // vectors inserted into index/db (if applicable)
+  string phase = 7;    // started|working|completed|error
+  string message = 8;  // free-form status
+}
+
+message ModelLoadEvent {
+  string model_name = 1;
+  string phase = 2;       // started|downloading|initializing|warming|completed|error
+  uint64 bytes_total = 3; // if downloading
+  uint64 bytes_loaded = 4;
+  string message = 5;
+}
+
+message ModelLoadResponse { bool loaded = 1; string message = 2; }
+message ModelStatusResponse { string model_name = 1; string status = 2; }
+// Extended to include path, documents_added, and size for richer client feedback
+message AddDocumentResponse {
+  string hash = 1;
+  string message = 2;
+  string path = 3;             // absolute or provided path for the request
+  uint64 documents_added = 4;  // number of documents added (directories may add multiple)
+  uint64 size = 5;             // size of added content if applicable (single-file adds)
+  string snapshot_id = 6;      // auto-generated ISO 8601 timestamp for directory operations
+  string snapshot_label = 7;   // optional human-friendly label
+  uint64 documents_updated = 8;
+  uint64 documents_skipped = 9;
+}
+// First-class grep match with full context
+message GrepMatch {
+  string file = 1;
+  int64 line_number = 2;
+  bytes line = 3;  // Changed from string to bytes to support binary/non-UTF-8 content
+  repeated bytes context_before = 4;  // Changed from string to bytes
+  repeated bytes context_after = 5;   // Changed from string to bytes
+  string match_type = 6;
+  double confidence = 7;
+}
+
+message GrepResponse {
+  // Preferred field
+  repeated GrepMatch matches = 1;
+  // Backward compatibility for legacy clients/servers (deprecated)
+  // Use bytes to avoid libprotobuf UTF-8 validation failures when binary data is present.
+  repeated bytes lines = 2;
+  uint64 total_matches = 3;
+  uint64 files_searched = 4;
+  uint64 regex_matches = 5;
+  uint64 semantic_matches = 6;
+  int64 execution_time_ms = 7;
+  string query_info = 8;
+  repeated KvPair search_stats = 9;
+  repeated string files_with = 10;
+  repeated string files_without = 11;
+  repeated string paths_only = 12;
+}
+
+message UpdateDocumentResponse { bool updated = 1; }
+message EmbedDocumentsResponse {
+  uint64 requested = 1;
+  uint64 embedded = 2;
+  uint64 skipped = 3;
+  uint64 failed = 4;
+}
+
+message PluginScanResponse { repeated PluginRecord plugins = 1; }
+message PluginLoadResponse { bool loaded = 1; string message = 2; PluginRecord record = 3; }
+message PluginTrustListResponse { repeated string paths = 1; }
+// Extended to match legacy ipc_protocol parity
+message DownloadResponse {
+  string url = 1;
+  string path = 2;
+  string hash = 3;
+  uint64 size = 4;
+  bool success = 5;
+  string error = 6;
+}
+message GetStatsResponse {
+  string json = 1;
+  // Numeric fields to support non-JSON clients
+  uint64 total_documents = 2;
+  uint64 total_size = 3;
+  uint64 indexed_documents = 4;
+  uint64 vector_index_size = 5;
+  double compression_ratio = 6;
+}
+message DeleteResponse { bool success = 1; uint64 count = 2; }
+message PrepareSessionResponse { uint64 warmed_count = 1; string message = 2; }
+
+// File history (PBI-043)
+message FileVersion {
+  string snapshot_id = 1;
+  string hash = 2;
+  uint64 size = 3;
+  int64 indexed_timestamp = 4;
+}
+message FileHistoryResponse {
+  string filepath = 1;
+  repeated FileVersion versions = 2;
+  uint32 total_versions = 3;
+  bool found = 4;
+  string message = 5;
+}
+
+message CancelRequest {
+  uint64 target_request_id = 1;
+}
+
+message CatRequest {
+  string hash = 1;
+  string name = 2;
+}
+
+message CatResponse {
+  string hash = 1;
+  string name = 2;
+  bytes content = 3;
+  uint64 size = 4;
+  bool has_content = 5;
+}
+
+// Session management
+message ListSessionsRequest {}
+message ListSessionsResponse {
+  repeated string session_names = 1;
+  string current_session = 2;
+}
+
+message UseSessionRequest {
+  string session_name = 1;
+}
+
+message AddPathSelectorRequest {
+  string session_name = 1; // optional, defaults to current
+  string path = 2;
+  repeated string tags = 3;
+  repeated KvPair metadata = 4;
+}
+
+message RemovePathSelectorRequest {
+  string session_name = 1; // optional, defaults to current
+  string path = 2;
+}
+
+// Tree diff queries (PBI-043)
+message ListTreeDiffRequest {
+  string base_snapshot_id = 1;
+  string target_snapshot_id = 2;
+  string path_prefix = 3; // optional filter
+  string type_filter = 4; // optional: "added", "modified", "deleted", "renamed"
+  uint64 limit = 5;
+  uint64 offset = 6;
+}
+
+message TreeChangeEntry {
+  string change_type = 1; // "added", "modified", "deleted", "renamed"
+  string path = 2;
+  string old_path = 3; // for renames
+  string hash = 4; // content hash (SHA256)
+  string old_hash = 5; // for modifications
+  uint64 size = 6;
+  uint64 old_size = 7;
+  string content_delta_hash = 8; // optional delta blob hash
+}
+
+message ListTreeDiffResponse {
+  repeated TreeChangeEntry changes = 1;
+  uint64 total_count = 2;
+}
+
+message FileHistoryRequest {
+  string filepath = 1;
+}
+
+// Prune/cleanup operations
+message PruneRequest {
+  repeated string categories = 1;  // build-artifacts, build-system, logs, cache, temp, etc.
+  repeated string extensions = 2;  // Specific extensions to prune
+  string older_than = 3;           // Duration string: 30d, 2w, 6m
+  string larger_than = 4;          // Size string: 10MB, 1GB
+  string smaller_than = 5;         // Size string: 1KB
+  repeated string exclude_patterns = 6;  // Paths to exclude
+  bool dry_run = 7;                // Don't actually delete
+  bool verbose = 8;                // Detailed output
+}
+
+message PruneResponse {
+  uint64 files_deleted = 1;
+  uint64 files_failed = 2;
+  uint64 total_bytes_freed = 3;
+  map<string, uint64> category_counts = 4;
+  map<string, uint64> category_sizes = 5;
+  repeated string deleted_paths = 6;
+  repeated string failed_paths = 7;
+  string error_message = 8;
+}
+
+// Collection and snapshot operations
+message ListCollectionsRequest {
+  // No parameters needed - returns all collections
+}
+
+message ListCollectionsResponse {
+  repeated string collections = 1;
+  uint64 total_count = 2;
+}
+
+message ListSnapshotsRequest {
+  // No parameters
+}
+
+message SnapshotInfo {
+  string id = 1;
+  string label = 2;
+  string created_at = 3;
+  uint64 document_count = 4;
+}
+
+message ListSnapshotsResponse {
+  repeated SnapshotInfo snapshots = 1;
+  uint64 total_count = 2;
+}
+
+message RestoreCollectionRequest {
+  string collection = 1;
+  string output_directory = 2;
+  string layout_template = 3;
+  repeated string include_patterns = 4;
+  repeated string exclude_patterns = 5;
+  bool overwrite = 6;
+  bool create_dirs = 7;
+  bool dry_run = 8;
+}
+
+message RestoredFile {
+  string path = 1;
+  string hash = 2;
+  uint64 size = 3;
+  bool skipped = 4;
+  string skip_reason = 5;
+}
+
+message RestoreCollectionResponse {
+  uint64 files_restored = 1;
+  repeated RestoredFile files = 2;
+  bool dry_run = 3;
+}
+
+message RestoreSnapshotRequest {
+  string snapshot_id = 1;
+  string output_directory = 2;
+  string layout_template = 3;
+  repeated string include_patterns = 4;
+  repeated string exclude_patterns = 5;
+  bool overwrite = 6;
+  bool create_dirs = 7;
+  bool dry_run = 8;
+}
+
+message RestoreSnapshotResponse {
+  uint64 files_restored = 1;
+  repeated RestoredFile files = 2;
+  bool dry_run = 3;
+}
+
+// Graph maintenance requests/responses (PBI-009)
+message GraphRepairRequest {
+  bool dry_run = 1;
+}
+
+message GraphRepairResponse {
+  uint64 nodes_created = 1;
+  uint64 nodes_updated = 2;
+  uint64 edges_created = 3;
+  uint64 errors = 4;
+  repeated string issues = 5;
+  bool dry_run = 6;
+}
+
+message GraphValidateRequest {
+  // Empty for now
+}
+
+message GraphValidateResponse {
+  uint64 total_nodes = 1;
+  uint64 total_edges = 2;
+  uint64 orphaned_nodes = 3;
+  uint64 unreachable_nodes = 4;
+  repeated string issues = 5;
+}
+
+// KG Ingest types (PBI-093)
+message KgIngestNode {
+  string node_key = 1;
+  string label = 2;
+  string type = 3;
+  string properties = 4;  // JSON blob
+}
+
+message KgIngestEdge {
+  string src_node_key = 1;
+  string dst_node_key = 2;
+  string relation = 3;
+  float weight = 4;
+  string properties = 5;  // JSON blob
+}
+
+message KgIngestAlias {
+  string node_key = 1;
+  string alias = 2;
+  string source = 3;
+  float confidence = 4;
+}
+
+message KgIngestRequest {
+  repeated KgIngestNode nodes = 1;
+  repeated KgIngestEdge edges = 2;
+  repeated KgIngestAlias aliases = 3;
+  string document_hash = 4;
+  bool skip_existing_nodes = 5;
+  bool skip_existing_edges = 6;
+}
+
+message KgIngestResponse {
+  uint64 nodes_inserted = 1;
+  uint64 nodes_skipped = 2;
+  uint64 edges_inserted = 3;
+  uint64 edges_skipped = 4;
+  uint64 aliases_inserted = 5;
+  uint64 aliases_skipped = 6;
+  repeated string errors = 7;
+  bool success = 8;
+}
+
+// Generic metadata value counts query (MCP client mode)
+message MetadataValueCount {
+  string value = 1;
+  uint64 count = 2;
+}
+
+message MetadataValueCountList {
+  repeated MetadataValueCount items = 1;
+}
+
+message MetadataValueCountsRequest {
+  repeated string keys = 1;  // e.g., ["collection"]
+}
+
+message MetadataValueCountsResponse {
+  // Map: key -> list of {value, count}
+  map<string, MetadataValueCountList> value_counts = 1;
+}
+
+// Graph Query types (PBI-009/093)
+message GraphNode {
+  int64 node_id = 1;
+  string node_key = 2;
+  string label = 3;
+  string type = 4;
+  string document_hash = 5;
+  string document_path = 6;
+  string snapshot_id = 7;
+  int32 distance = 8;
+  string properties = 9;  // JSON blob
+}
+
+message GraphQueryRequest {
+  string document_hash = 1;
+  string document_name = 2;
+  string snapshot_id = 3;
+  int64 node_id = 4;
+  bool list_by_type = 5;
+  string node_type = 6;
+  string node_key = 7;
+  bool list_types = 18;  // yams-66h: List available node types with counts
+  bool list_relations = 22;  // yams-kt5t: List relation types with counts
+  bool search_mode = 23;  // yams-kt5t: Search nodes by label pattern
+  string search_pattern = 24;  // yams-kt5t: Pattern for search mode
+  repeated string relation_filters = 8;
+  int32 max_depth = 9;
+  uint32 max_results = 10;
+  uint32 max_results_per_depth = 11;
+  bool reverse_traversal = 19;
+  bool isolated_mode = 20;  // Find isolated nodes (no incoming edges)
+  string isolated_relation = 21;  // Relation to check for isolation
+  string scope_to_snapshot = 12;
+  uint32 offset = 13;
+  uint32 limit = 14;
+  bool include_edge_properties = 15;
+  bool include_node_properties = 16;
+  bool hydrate_fully = 17;
+  string session_id = 99;
+}
+
+message NodeTypeCount {
+  string type = 1;
+  uint64 count = 2;
+}
+
+// yams-kt5t: Relation type count for --relations flag
+message RelationTypeCount {
+  string relation = 1;
+  uint64 count = 2;
+}
+
+message GraphEdge {
+  int64 edge_id = 1;
+  int64 src_node_id = 2;
+  int64 dst_node_id = 3;
+  string relation = 4;
+  float weight = 5;
+  string properties = 6;
+}
+
+message GraphQueryResponse {
+  GraphNode origin_node = 1;
+  repeated GraphNode connected_nodes = 2;
+  uint64 total_nodes_found = 3;
+  uint64 total_edges_traversed = 4;
+  bool truncated = 5;
+  int32 max_depth_reached = 6;
+  int64 query_time_ms = 7;
+  bool kg_available = 8;
+  string warning = 9;
+  repeated NodeTypeCount node_type_counts = 10;  // yams-66h: Node type counts for --list-types
+  repeated GraphEdge edges = 11;
+  repeated RelationTypeCount relation_type_counts = 12;  // yams-kt5t: Relation type counts
+}
+
+message GraphPathHistoryRequest {
+  string path = 1;
+  uint32 limit = 2;
+}
+
+message PathHistoryEntry {
+  string path = 1;
+  string snapshot_id = 2;
+  string blob_hash = 3;
+  string change_type = 4;
+}
+
+message GraphPathHistoryResponse {
+  string query_path = 1;
+  repeated PathHistoryEntry history = 2;
+  bool has_more = 3;
+}
+
+// Document repair (RepairService)
+message RepairRequest {
+  // Operation flags
+  bool repair_orphans = 1;
+  bool repair_mime = 2;
+  bool repair_downloads = 3;
+  bool repair_path_tree = 4;
+  bool repair_chunks = 5;
+  bool repair_block_refs = 6;
+  bool repair_fts5 = 7;
+  bool repair_embeddings = 8;
+  bool repair_stuck_docs = 9;
+  bool optimize_db = 10;
+  bool repair_all = 11;
+
+  // Options
+  bool dry_run = 12;
+  bool verbose = 13;
+  bool force = 14;
+  bool foreground = 15;
+  string embedding_model = 16;
+  repeated string include_mime = 17;
+  int32 max_retries = 18;
+}
+
+message RepairOperationResult {
+  string operation = 1;
+  uint64 processed = 2;
+  uint64 succeeded = 3;
+  uint64 failed = 4;
+  uint64 skipped = 5;
+  string message = 6;
+}
+
+// Streaming progress event emitted during repair
+message RepairEvent {
+  string phase = 1;     // scanning | repairing | completed | error
+  string operation = 2; // orphans | mime | fts5 | embeddings | stuck_docs | ...
+  uint64 processed = 3;
+  uint64 total = 4;
+  uint64 succeeded = 5;
+  uint64 failed = 6;
+  uint64 skipped = 7;
+  string message = 8;
+}
+
+// Final response after all requested repair operations complete
+message RepairResponse {
+  bool success = 1;
+  uint64 total_operations = 2;
+  uint64 total_succeeded = 3;
+  uint64 total_failed = 4;
+  uint64 total_skipped = 5;
+  repeated string errors = 6;
+  repeated RepairOperationResult operation_results = 7;
+}
+
+// ENVELOPE
+message Envelope {
+  uint32 version = 1;
+  uint64 request_id = 2;
+  string session_id = 3;
+  string client_version = 4;
+  bool expects_streaming_response = 5;  // Client indicates if it expects chunked/streaming response
+  oneof payload {
+    // Requests
+    PingRequest ping_request = 10;
+    SearchRequest search_request = 11;
+    GetRequest get_request = 13;
+    GetInitRequest get_init_request = 14;
+    GetChunkRequest get_chunk_request = 15;
+    GetEndRequest get_end_request = 16;
+    DeleteRequest delete_request = 17;
+    ListRequest list_request = 18;
+    ShutdownRequest shutdown_request = 19;
+    StatusRequest status_request = 20;
+    GenerateEmbeddingRequest generate_embedding_request = 21;
+    BatchEmbeddingRequest batch_embedding_request = 22;
+    LoadModelRequest load_model_request = 23;
+    UnloadModelRequest unload_model_request = 24;
+    ModelStatusRequest model_status_request = 25;
+    AddDocumentRequest add_document_request = 26;
+    GrepRequest grep_request = 27;
+    UpdateDocumentRequest update_document_request = 28;
+    DownloadRequest download_request = 29;
+    GetStatsRequest get_stats_request = 30;
+    PrepareSessionRequest prepare_session_request = 31;
+    EmbedDocumentsRequest embed_documents_request = 32;
+    // Plugin requests
+    PluginScanRequest plugin_scan_request = 33;
+    PluginLoadRequest plugin_load_request = 34;
+    PluginUnloadRequest plugin_unload_request = 35;
+    PluginTrustListRequest plugin_trust_list_request = 36;
+    PluginTrustAddRequest plugin_trust_add_request = 37;
+    PluginTrustRemoveRequest plugin_trust_remove_request = 38;
+    CancelRequest cancel_request = 39;
+    CatRequest cat_request = 40;
+    // Session requests
+    ListSessionsRequest list_sessions_request = 41;
+    UseSessionRequest use_session_request = 42;
+    AddPathSelectorRequest add_path_selector_request = 43;
+    RemovePathSelectorRequest remove_path_selector_request = 44;
+    // Tree diff requests (PBI-043)
+    ListTreeDiffRequest list_tree_diff_request = 45;
+    FileHistoryRequest file_history_request = 46;
+    // Prune request
+    PruneRequest prune_request = 47;
+    // Collection and snapshot requests
+    ListCollectionsRequest list_collections_request = 48;
+    ListSnapshotsRequest list_snapshots_request = 49;
+    RestoreCollectionRequest restore_collection_request = 50;
+    RestoreSnapshotRequest restore_snapshot_request = 51;
+    // Graph maintenance requests (PBI-009)
+    GraphRepairRequest graph_repair_request = 52;
+    GraphValidateRequest graph_validate_request = 53;
+    // KG Ingest request (PBI-093)
+    KgIngestRequest kg_ingest_request = 54;
+    // Graph query requests
+    GraphQueryRequest graph_query_request = 55;
+    GraphPathHistoryRequest graph_path_history_request = 56;
+    MetadataValueCountsRequest metadata_value_counts_request = 57;
+    // Document repair request (RepairService)
+    RepairRequest repair_request = 58;
+
+    // Responses
+    SuccessResponse success_response = 100;
+    ErrorResponse error = 101;
+    PongResponse pong_response = 102;
+    SearchResponse search_response = 103;
+    AddResponse add_response = 104;
+    GetResponse get_response = 105;
+    GetInitResponse get_init_response = 106;
+    GetChunkResponse get_chunk_response = 107;
+    StatusResponse status_response = 108;
+    EmbeddingResponse embedding_response = 109;
+    BatchEmbeddingResponse batch_embedding_response = 110;
+    ModelLoadResponse model_load_response = 111;
+    ModelStatusResponse model_status_response = 112;
+    ListResponse list_response = 113;
+    AddDocumentResponse add_document_response = 114;
+    GrepResponse grep_response = 115;
+    UpdateDocumentResponse update_document_response = 116;
+    GetStatsResponse get_stats_response = 117;
+    DownloadResponse download_response = 118;
+    DeleteResponse delete_response = 119;
+    PrepareSessionResponse prepare_session_response = 120;
+    EmbedDocumentsResponse embed_documents_response = 121;
+    // Streaming events
+    EmbedEvent embed_event = 122;
+    ModelLoadEvent model_load_event = 123;
+    // Plugin responses
+    PluginScanResponse plugin_scan_response = 124;
+    PluginLoadResponse plugin_load_response = 125;
+    PluginTrustListResponse plugin_trust_list_response = 126;
+    CatResponse cat_response = 127;
+    ListSessionsResponse list_sessions_response = 128;
+    // Tree diff responses (PBI-043)
+    ListTreeDiffResponse list_tree_diff_response = 129;
+    FileHistoryResponse file_history_response = 130;
+    PathTreeResponse path_tree_response = 131;
+    // Prune response
+    PruneResponse prune_response = 132;
+    // Collection and snapshot responses
+    ListCollectionsResponse list_collections_response = 133;
+    ListSnapshotsResponse list_snapshots_response = 134;
+    RestoreCollectionResponse restore_collection_response = 135;
+    RestoreSnapshotResponse restore_snapshot_response = 136;
+    // Graph maintenance responses (PBI-009)
+    GraphRepairResponse graph_repair_response = 137;
+    GraphValidateResponse graph_validate_response = 138;
+    // KG Ingest response (PBI-093)
+    KgIngestResponse kg_ingest_response = 139;
+    // Graph query responses
+    GraphQueryResponse graph_query_response = 140;
+    GraphPathHistoryResponse graph_path_history_response = 141;
+    MetadataValueCountsResponse metadata_value_counts_response = 142;
+    // Batch request/response (Track B)
+    BatchRequest batch_request = 143;
+    BatchResponse batch_response = 144;
+    // Document repair responses + streaming event (RepairService)
+    RepairResponse repair_response = 145;
+    RepairEvent repair_event = 146;
+
+  }
+}
+
+// =============================================================================
+// Batch Request/Response Types (Track B: Communication Overhead Reduction)
+// =============================================================================
+
+message BatchRequest {
+  repeated BatchItem items = 1;
+  bool continue_on_error = 2;
+  string session_id = 99;
+  string instance_id = 100;
+}
+
+message BatchItem {
+  uint32 sequence_id = 1;
+  oneof request {
+    SearchRequest search_request = 11;
+    GetRequest get_request = 13;
+    AddDocumentRequest add_document_request = 26;
+    GrepRequest grep_request = 27;
+    UpdateDocumentRequest update_document_request = 28;
+    DeleteRequest delete_request = 17;
+    ListRequest list_request = 18;
+    GraphQueryRequest graph_query_request = 55;
+  }
+}
+
+message BatchResponse {
+  repeated BatchItemResponse items = 1;
+  uint32 total_count = 2;
+  uint32 success_count = 3;
+  uint32 error_count = 4;
+  int64 elapsed_ms = 5;
+}
+
+message BatchItemResponse {
+  uint32 sequence_id = 1;
+  bool success = 2;
+  oneof response {
+    SearchResponse search_response = 103;
+    GetResponse get_response = 105;
+    AddDocumentResponse add_document_response = 114;
+    GrepResponse grep_response = 115;
+    UpdateDocumentResponse update_document_response = 116;
+    DeleteResponse delete_response = 119;
+    ListResponse list_response = 113;
+    GraphQueryResponse graph_query_response = 140;
+    ErrorResponse error = 101;
+  }
+}

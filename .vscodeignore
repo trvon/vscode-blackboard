@@ -1,0 +1,8 @@
+src/**
+proto/**
+__tests__/**
+.gitignore
+tsconfig.json
+esbuild.mjs
+buf.gen.yaml
+*.map
