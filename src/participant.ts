@@ -75,11 +75,14 @@ async function handleRequest(
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
 ): Promise<void> {
+    void bb; // tools are the integration point
+
     // Select a language model
-    const [model] = await vscode.lm.selectChatModels({
-        vendor: "copilot",
-        family: "gpt-4o",
-    });
+    let models = await vscode.lm.selectChatModels({ vendor: "copilot" });
+    if (models.length === 0) {
+        models = await vscode.lm.selectChatModels();
+    }
+    const [model] = models;
 
     if (!model) {
         stream.markdown(
@@ -140,7 +143,10 @@ async function handleRequest(
             try {
                 const result = await vscode.lm.invokeTool(
                     call.name,
-                    { input: call.input, toolInvocationToken: undefined },
+                    {
+                        input: call.input,
+                        toolInvocationToken: request.toolInvocationToken,
+                    },
                     token,
                 );
 

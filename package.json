@@ -20,6 +20,7 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "icon": "media/yams.png",
   "scripts": {
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",

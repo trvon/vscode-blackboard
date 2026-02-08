@@ -8,7 +8,7 @@
 
 import * as vscode from "vscode";
 import { YamsDaemonClient } from "./daemon/client.js";
-import { socketExists } from "./daemon/socket.js";
+import { socketExists, resolveSocketPath } from "./daemon/socket.js";
 import { YamsBlackboard } from "./blackboard/blackboard.js";
 import type { ContextState } from "./tools/context-tools.js";
 import { registerAgentTools } from "./tools/agent-tools.js";
@@ -83,13 +83,8 @@ export async function activate(
         reconnectMaxMs: 30_000,
     });
 
-    // 3. Wire connection events for status bar
-    const conn = (client as any).conn; // access SocketConnection for events
-    if (conn && typeof conn.on === "function") {
-        conn.on("connect", () => updateStatusBar("connected"));
-        conn.on("close", () => updateStatusBar("disconnected"));
-        conn.on("reconnecting", () => updateStatusBar("reconnecting"));
-    }
+    // 3. Wire connection events for status bar by subclassing is not available.
+    // We track connection status via client.connected + best-effort connect loop.
 
     // 4. Attempt connection (non-blocking)
     updateStatusBar("disconnected");
@@ -106,7 +101,7 @@ export async function activate(
         }
     } else {
         vscode.window.showInformationMessage(
-            "YAMS Blackboard: Daemon socket not found. Tools will activate when the daemon starts.",
+            `YAMS Blackboard: Daemon socket not found at ${resolveSocketPath()}. Tools will activate when the daemon starts.`,
         );
     }
 
@@ -131,19 +126,53 @@ export async function activate(
     // 8. Register @blackboard chat participant
     registerParticipant(context, bb);
 
-    // 9. Start a YAMS session (non-blocking)
-    if (client.connected) {
-        bb.startSession("vscode-blackboard").catch(() => {
-            // Session start failed — not critical
-        });
-    }
+    // 9. Session + connection management
+    // IMPORTANT: do not call useSession() on every timer tick.
+    // Only start the session once per successful connection.
+    let connectInFlight = false;
+    let sessionStarted = false;
 
-    // Also start session on reconnect
-    if (conn && typeof conn.on === "function") {
-        conn.on("connect", () => {
-            bb.startSession("vscode-blackboard").catch(() => {});
+    const ensureConnected = async () => {
+        if (!client || client.connected || connectInFlight) return;
+        if (!socketExists()) return;
+        connectInFlight = true;
+        updateStatusBar("reconnecting");
+        try {
+            await client.connect();
+        } catch {
+            // Best-effort; next tick will retry.
+        } finally {
+            connectInFlight = false;
+        }
+    };
+
+    const startSessionOnce = () => {
+        if (!client?.connected || sessionStarted) return;
+        sessionStarted = true;
+        bb.startSession("vscode-blackboard").catch(() => {
+            // If session start fails, allow retry.
+            sessionStarted = false;
         });
-    }
+    };
+
+    // Initial best-effort session start
+    startSessionOnce();
+
+    // Poll connection state to update status bar + attempt connect when daemon starts.
+    const poll = setInterval(() => {
+        if (!client) return;
+        void ensureConnected();
+
+        if (!client.connected) {
+            sessionStarted = false;
+            if (!connectInFlight) updateStatusBar("disconnected");
+            return;
+        }
+
+        updateStatusBar("connected");
+        startSessionOnce();
+    }, 5_000);
+    context.subscriptions.push({ dispose: () => clearInterval(poll) });
 
     // 10. Ensure client cleanup
     context.subscriptions.push({
