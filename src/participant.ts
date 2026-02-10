@@ -8,6 +8,30 @@
 import * as vscode from "vscode";
 import type { YamsBlackboard } from "./blackboard/blackboard.js";
 
+function extractAssistantHistory(chatContext: vscode.ChatContext): vscode.LanguageModelChatMessage[] {
+    const messages: vscode.LanguageModelChatMessage[] = [];
+
+    const previousResponses = chatContext.history.filter(
+        (h) => h instanceof vscode.ChatResponseTurn,
+    ) as vscode.ChatResponseTurn[];
+
+    for (const turn of previousResponses) {
+        let full = "";
+        for (const part of turn.response) {
+            // Keep this loose for forward-compat: we only care about markdown/text.
+            const md = (part as any)?.value?.value;
+            if (typeof md === "string") {
+                full += md;
+            }
+        }
+        if (full.trim().length > 0) {
+            messages.push(vscode.LanguageModelChatMessage.Assistant(full));
+        }
+    }
+
+    return messages;
+}
+
 // ---------------------------------------------------------------------------
 // System prompt
 // ---------------------------------------------------------------------------
@@ -82,7 +106,7 @@ async function handleRequest(
     bb: YamsBlackboard,
     defaultAgentId: string,
     request: vscode.ChatRequest,
-    _context: vscode.ChatContext,
+    chatContext: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
 ): Promise<void> {
@@ -116,17 +140,105 @@ async function handleRequest(
             ? asSystem(systemPrompt)
             : vscode.LanguageModelChatMessage.User(systemPrompt);
 
-    const messages = [
-        systemMessage,
-        vscode.LanguageModelChatMessage.User(request.prompt),
-    ];
+    const historyMessages = extractAssistantHistory(chatContext);
+
+    const messages = [systemMessage, ...historyMessages];
+
+    // If the user attached tool references (via #tool or paperclip), pre-run those tools.
+    // VS Code guidance: use toolMode=Required to force the model to produce tool input.
+    const referencedToolNames = [...new Set(request.toolReferences.map((t) => t.name))];
+    const referencedTools = referencedToolNames
+        .map((name) => bbTools.find((t) => t.name === name))
+        .filter(Boolean) as typeof bbTools;
+
+    for (const tool of referencedTools) {
+        if (token.isCancellationRequested) {
+            return;
+        }
+
+        stream.progress(`Running ${tool.name}...`);
+
+        const toolPrepMessages = [
+            ...messages,
+            vscode.LanguageModelChatMessage.User(
+                `Call the tool ${tool.name} to gather context needed to answer the user's request.`,
+            ),
+            vscode.LanguageModelChatMessage.User(request.prompt),
+        ];
+
+        const prepResponse = await model.sendRequest(
+            toolPrepMessages,
+            {
+                tools: [tool],
+                toolMode: vscode.LanguageModelChatToolMode.Required,
+            },
+            token,
+        );
+
+        const toolCalls: vscode.LanguageModelToolCallPart[] = [];
+        for await (const part of prepResponse.stream) {
+            if (part instanceof vscode.LanguageModelToolCallPart) {
+                toolCalls.push(part);
+            }
+        }
+
+        if (toolCalls.length === 0) {
+            continue;
+        }
+
+        const toolResults: vscode.LanguageModelChatMessage[] = [];
+        for (const call of toolCalls) {
+            if (token.isCancellationRequested) {
+                return;
+            }
+            try {
+                const result = await vscode.lm.invokeTool(
+                    call.name,
+                    {
+                        input: call.input,
+                        toolInvocationToken: request.toolInvocationToken,
+                    },
+                    token,
+                );
+
+                const textParts: string[] = [];
+                for (const p of result.content) {
+                    if (p instanceof vscode.LanguageModelTextPart) {
+                        textParts.push(p.value);
+                    }
+                }
+
+                toolResults.push(
+                    vscode.LanguageModelChatMessage.User([
+                        new vscode.LanguageModelToolResultPart(call.callId, [
+                            new vscode.LanguageModelTextPart(textParts.join("\n")),
+                        ]),
+                    ]),
+                );
+            } catch (err) {
+                const errMsg = err instanceof Error ? err.message : String(err);
+                toolResults.push(
+                    vscode.LanguageModelChatMessage.User([
+                        new vscode.LanguageModelToolResultPart(call.callId, [
+                            new vscode.LanguageModelTextPart(`Error: ${errMsg}`),
+                        ]),
+                    ]),
+                );
+            }
+        }
+
+        // Append tool calls + results into the conversation context.
+        messages.push(
+            vscode.LanguageModelChatMessage.Assistant(toolCalls),
+            ...toolResults,
+        );
+    }
+
+    // Finally add the user's prompt.
+    messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
 
     // Run the model with tool access
-    const response = await model.sendRequest(
-        messages,
-        { tools: bbTools },
-        token,
-    );
+    const response = await model.sendRequest(messages, { tools: bbTools }, token);
 
     // Stream the response, handling tool calls
     const maxToolRounds = 10;
@@ -228,6 +340,43 @@ export function registerParticipant(
     );
 
     participant.iconPath = new vscode.ThemeIcon("circuit-board");
+
+    participant.followupProvider = {
+        provideFollowups: (
+            _result: vscode.ChatResult,
+            _chatContext: vscode.ChatContext,
+            _token: vscode.CancellationToken,
+        ): vscode.ProviderResult<vscode.ChatFollowup[]> => {
+            // "Beads"-style: always offer a quick way to re-check task progress.
+            // Followups can only route to participants contributed by this extension.
+            return [
+                {
+                    label: "Task progress",
+                    prompt:
+                        "Show task progress (beads): counts by status (ready/claimed/working/completed/failed) and my assigned/claimed tasks.",
+                    participant: "blackboard",
+                },
+                {
+                    label: "My claimed tasks",
+                    prompt:
+                        "List tasks assigned to or claimed by my default agent. If there are many, show the top 10 most urgent.",
+                    participant: "blackboard",
+                },
+                {
+                    label: "Ready queue",
+                    prompt:
+                        "Show ready tasks and suggest what I should pick up next.",
+                    participant: "blackboard",
+                },
+                {
+                    label: "Recent activity",
+                    prompt:
+                        "Show recent blackboard activity (tasks + findings) since the last check.",
+                    participant: "blackboard",
+                },
+            ];
+        },
+    };
 
     context.subscriptions.push(participant);
 }

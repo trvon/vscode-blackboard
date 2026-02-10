@@ -71,7 +71,7 @@ export class YamsBlackboard {
         tags: string[],
         metadata?: Array<{ key: string; value: string }>,
     ): Promise<void> {
-        const baseMeta = [{ key: "owner", value: "opencode" }];
+        const baseMeta = [{ key: "owner", value: "vscode" }];
         await this.client.add({
             content,
             name,
@@ -119,7 +119,7 @@ export class YamsBlackboard {
     // ===========================================================================
 
     async startSession(name?: string): Promise<string> {
-        this.sessionName = name || `opencode-${Date.now()}`;
+        this.sessionName = name || `vscode-${Date.now()}`;
         await this.client.useSession(this.sessionName);
         this.sessionActive = true;
         return this.sessionName;

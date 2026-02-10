@@ -3,7 +3,7 @@
   "displayName": "YAMS Blackboard",
   "description": "Multi-agent coordination via YAMS blackboard — post findings, claim tasks, and discover agent work through direct daemon IPC.",
   "version": "0.1.0",
-  "publisher": "trvon",
+  "publisher": "yamsmemoryai",
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",

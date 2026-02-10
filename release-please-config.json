@@ -1,0 +1,10 @@
+{
+  "release-type": "node",
+  "packages": {
+    ".": {
+      "package-name": "vscode-blackboard",
+      "changelog-path": "CHANGELOG.md",
+      "include-v-in-tag": true
+    }
+  }
+}

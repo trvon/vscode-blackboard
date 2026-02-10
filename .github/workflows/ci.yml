@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - "**"
   workflow_dispatch:
   release:
     types: [published]
@@ -47,7 +47,7 @@ jobs:
     if: >-
       github.event_name == 'release' &&
       github.event.release.tag_name != '' &&
-      startsWith(github.event.release.tag_name, 'vscode-blackboard-v') &&
+      startsWith(github.event.release.tag_name, 'v') &&
       secrets.VSCE_PAT != ''
     runs-on: ubuntu-latest
     steps:
