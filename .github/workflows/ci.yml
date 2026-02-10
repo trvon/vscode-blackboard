@@ -4,8 +4,6 @@ on:
   pull_request:
   push:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   test-build-package:
@@ -39,32 +37,3 @@ jobs:
         with:
           name: vscode-blackboard-vsix
           path: "*.vsix"
-
-  publish:
-    needs: test-build-package
-    if: >-
-      github.event_name == 'release' &&
-      github.event.release.tag_name != '' &&
-      startsWith(github.event.release.tag_name, 'v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - run: npm ci
-      - run: npm run build
-
-      - name: Skip publish (missing VSCE_PAT)
-        if: ${{ secrets.VSCE_PAT == '' }}
-        run: echo "VSCE_PAT is not set; skipping marketplace publish."
-
-      - name: Publish to VS Code Marketplace
-        if: ${{ secrets.VSCE_PAT != '' }}
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx --yes @vscode/vsce publish --pat "$VSCE_PAT"
