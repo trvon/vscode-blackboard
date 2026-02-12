@@ -46,6 +46,15 @@ async function main() {
   if (wantCoverage) {
     // Works on Node 20+ (and still accepted on newer versions).
     nodeArgs.push("--experimental-test-coverage");
+
+    // CI robustness: restrict reporting to our compiled sources only.
+    // The Node coverage reporter can crash when it tries to summarize certain
+    // non-project files (e.g., generated artifacts or runtime internals).
+    const distRoot = path.resolve(root, "..");
+    const compiledSrc = path.join(distRoot, "src", "**", "*.js");
+    nodeArgs.push(`--test-coverage-include=${compiledSrc}`);
+    nodeArgs.push("--test-coverage-exclude=**/node_modules/**");
+    nodeArgs.push("--test-coverage-exclude=**/proto/**");
   }
   nodeArgs.push(...testFiles);
 
