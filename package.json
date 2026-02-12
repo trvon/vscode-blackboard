@@ -27,7 +27,7 @@
     "pretest:build": "npm run proto:generate",
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
-    "proto:generate": "npx buf generate",
+    "proto:generate": "buf generate",
     "typecheck": "tsc --noEmit",
     "vscode:prepublish": "npm run build",
     "test:build": "tsc -p tsconfig.test.json",
