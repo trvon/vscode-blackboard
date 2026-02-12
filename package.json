@@ -2,7 +2,7 @@
   "name": "vscode-blackboard",
   "displayName": "YAMS Blackboard",
   "description": "Multi-agent coordination via YAMS blackboard — post findings, claim tasks, and discover agent work through direct daemon IPC.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "yamsmemoryai",
   "license": "GPL-3.0-only",
   "repository": {
@@ -22,6 +22,9 @@
   "main": "./dist/extension.js",
   "icon": "media/yams.png",
   "scripts": {
+    "prebuild": "npm run proto:generate",
+    "pretypecheck": "npm run proto:generate",
+    "pretest:build": "npm run proto:generate",
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "proto:generate": "npx buf generate",
@@ -50,11 +53,27 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["id", "name", "capabilities"],
+          "required": [
+            "id",
+            "name",
+            "capabilities"
+          ],
           "properties": {
-            "id": { "type": "string", "description": "Unique agent identifier" },
-            "name": { "type": "string", "description": "Human-readable name" },
-            "capabilities": { "type": "array", "items": { "type": "string" }, "description": "List of capabilities" }
+            "id": {
+              "type": "string",
+              "description": "Unique agent identifier"
+            },
+            "name": {
+              "type": "string",
+              "description": "Human-readable name"
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of capabilities"
+            }
           }
         }
       },
@@ -63,7 +82,15 @@
         "displayName": "List Agents",
         "description": "List all registered agents and their capabilities",
         "canBeReferencedInPrompt": true,
-        "inputSchema": { "type": "object", "properties": {} }
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "instance_id": {
+              "type": "string",
+              "description": "Optional instance ID to filter agents; defaults to all instances"
+            }
+          }
+        }
       },
       {
         "name": "bb_post_finding",
@@ -72,19 +99,112 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["topic", "title", "content"],
+          "required": [
+            "topic",
+            "title",
+            "content"
+          ],
           "properties": {
-            "agent_id": { "type": "string", "description": "Your agent identifier" },
-            "topic": { "type": "string", "enum": ["security", "performance", "bug", "architecture", "refactor", "test", "doc", "dependency", "accessibility", "other"], "description": "Category" },
-            "title": { "type": "string", "description": "Brief summary of the finding" },
-            "content": { "type": "string", "description": "Full details in markdown" },
-            "confidence": { "type": "number", "description": "Confidence level 0-1" },
-            "severity": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"], "description": "Impact level" },
-            "references": { "type": "array", "items": { "type": "object", "properties": { "type": { "type": "string", "enum": ["file", "url", "finding", "task", "symbol"] }, "target": { "type": "string" }, "label": { "type": "string" }, "line_start": { "type": "number" }, "line_end": { "type": "number" } }, "required": ["type", "target"] } },
-            "context_id": { "type": "string", "description": "Group with related findings" },
-            "parent_id": { "type": "string", "description": "Reply to another finding" },
-            "scope": { "type": "string", "enum": ["session", "persistent"], "description": "Persistence scope" },
-            "metadata": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Additional key-value metadata" }
+            "agent_id": {
+              "type": "string",
+              "description": "Your agent identifier"
+            },
+            "topic": {
+              "type": "string",
+              "enum": [
+                "security",
+                "performance",
+                "bug",
+                "architecture",
+                "refactor",
+                "test",
+                "doc",
+                "dependency",
+                "accessibility",
+                "other"
+              ],
+              "description": "Category"
+            },
+            "title": {
+              "type": "string",
+              "description": "Brief summary of the finding"
+            },
+            "content": {
+              "type": "string",
+              "description": "Full details in markdown"
+            },
+            "confidence": {
+              "type": "number",
+              "description": "Confidence level 0-1"
+            },
+            "severity": {
+              "type": "string",
+              "enum": [
+                "info",
+                "low",
+                "medium",
+                "high",
+                "critical"
+              ],
+              "description": "Impact level"
+            },
+            "references": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "file",
+                      "url",
+                      "finding",
+                      "task",
+                      "symbol"
+                    ]
+                  },
+                  "target": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "line_start": {
+                    "type": "number"
+                  },
+                  "line_end": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "type",
+                  "target"
+                ]
+              }
+            },
+            "context_id": {
+              "type": "string",
+              "description": "Group with related findings"
+            },
+            "parent_id": {
+              "type": "string",
+              "description": "Reply to another finding"
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "session",
+                "persistent"
+              ],
+              "description": "Persistence scope"
+            },
+            "metadata": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Additional key-value metadata"
+            }
           }
         }
       },
@@ -96,14 +216,67 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "topic": { "type": "string", "enum": ["security", "performance", "bug", "architecture", "refactor", "test", "doc", "dependency", "accessibility", "other"] },
-            "agent_id": { "type": "string" },
-            "context_id": { "type": "string" },
-            "status": { "type": "string", "enum": ["draft", "published", "acknowledged", "resolved", "rejected"] },
-            "severity": { "type": "array", "items": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] } },
-            "min_confidence": { "type": "number" },
-            "scope": { "type": "string", "enum": ["session", "persistent"] },
-            "limit": { "type": "number" }
+            "topic": {
+              "type": "string",
+              "enum": [
+                "security",
+                "performance",
+                "bug",
+                "architecture",
+                "refactor",
+                "test",
+                "doc",
+                "dependency",
+                "accessibility",
+                "other"
+              ]
+            },
+            "agent_id": {
+              "type": "string"
+            },
+            "context_id": {
+              "type": "string"
+            },
+            "instance_id": {
+              "type": "string",
+              "description": "Optional instance ID to scope results; defaults to all instances"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "published",
+                "acknowledged",
+                "resolved",
+                "rejected"
+              ]
+            },
+            "severity": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              }
+            },
+            "min_confidence": {
+              "type": "number"
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "session",
+                "persistent"
+              ]
+            },
+            "limit": {
+              "type": "number"
+            }
           }
         }
       },
@@ -114,11 +287,36 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["query"],
+          "required": [
+            "query"
+          ],
           "properties": {
-            "query": { "type": "string", "description": "Natural language search query" },
-            "topic": { "type": "string", "enum": ["security", "performance", "bug", "architecture", "refactor", "test", "doc", "dependency", "accessibility", "other"] },
-            "limit": { "type": "number" }
+            "query": {
+              "type": "string",
+              "description": "Natural language search query"
+            },
+            "topic": {
+              "type": "string",
+              "enum": [
+                "security",
+                "performance",
+                "bug",
+                "architecture",
+                "refactor",
+                "test",
+                "doc",
+                "dependency",
+                "accessibility",
+                "other"
+              ]
+            },
+            "instance_id": {
+              "type": "string",
+              "description": "Optional instance ID to scope results; defaults to all instances"
+            },
+            "limit": {
+              "type": "number"
+            }
           }
         }
       },
@@ -129,8 +327,14 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["finding_id"],
-          "properties": { "finding_id": { "type": "string" } }
+          "required": [
+            "finding_id"
+          ],
+          "properties": {
+            "finding_id": {
+              "type": "string"
+            }
+          }
         }
       },
       {
@@ -140,10 +344,16 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["finding_id"],
+          "required": [
+            "finding_id"
+          ],
           "properties": {
-            "finding_id": { "type": "string" },
-            "agent_id": { "type": "string" }
+            "finding_id": {
+              "type": "string"
+            },
+            "agent_id": {
+              "type": "string"
+            }
           }
         }
       },
@@ -154,11 +364,20 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["finding_id", "resolution"],
+          "required": [
+            "finding_id",
+            "resolution"
+          ],
           "properties": {
-            "finding_id": { "type": "string" },
-            "agent_id": { "type": "string" },
-            "resolution": { "type": "string" }
+            "finding_id": {
+              "type": "string"
+            },
+            "agent_id": {
+              "type": "string"
+            },
+            "resolution": {
+              "type": "string"
+            }
           }
         }
       },
@@ -169,15 +388,50 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["title", "type"],
+          "required": [
+            "title",
+            "type"
+          ],
           "properties": {
-            "title": { "type": "string" },
-            "description": { "type": "string" },
-            "type": { "type": "string", "enum": ["analysis", "fix", "review", "test", "research", "synthesis"] },
-            "priority": { "type": "number", "enum": [0, 1, 2, 3, 4] },
-            "created_by": { "type": "string" },
-            "depends_on": { "type": "array", "items": { "type": "string" } },
-            "context_id": { "type": "string" }
+            "title": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "analysis",
+                "fix",
+                "review",
+                "test",
+                "research",
+                "synthesis"
+              ]
+            },
+            "priority": {
+              "type": "number",
+              "enum": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ]
+            },
+            "created_by": {
+              "type": "string"
+            },
+            "depends_on": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "context_id": {
+              "type": "string"
+            }
           }
         }
       },
@@ -188,7 +442,11 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "properties": { "limit": { "type": "number" } }
+          "properties": {
+            "limit": {
+              "type": "number"
+            }
+          }
         }
       },
       {
@@ -198,10 +456,16 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["task_id"],
+          "required": [
+            "task_id"
+          ],
           "properties": {
-            "task_id": { "type": "string" },
-            "agent_id": { "type": "string" }
+            "task_id": {
+              "type": "string"
+            },
+            "agent_id": {
+              "type": "string"
+            }
           }
         }
       },
@@ -212,11 +476,67 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["task_id", "status"],
+          "required": [
+            "task_id"
+          ],
           "properties": {
-            "task_id": { "type": "string" },
-            "status": { "type": "string", "enum": ["pending", "claimed", "working", "blocked", "review", "completed", "failed", "cancelled"] },
-            "error": { "type": "string" }
+            "task_id": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "claimed",
+                "working",
+                "blocked",
+                "review",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "error": {
+              "type": "string"
+            },
+            "findings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "type"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "file",
+                      "data",
+                      "report"
+                    ]
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "hash": {
+                    "type": "string"
+                  },
+                  "mime_type": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -227,10 +547,51 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["task_id"],
+          "required": [
+            "task_id"
+          ],
           "properties": {
-            "task_id": { "type": "string" },
-            "findings": { "type": "array", "items": { "type": "string" } }
+            "task_id": {
+              "type": "string"
+            },
+            "findings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "type"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "file",
+                      "data",
+                      "report"
+                    ]
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "hash": {
+                    "type": "string"
+                  },
+                  "mime_type": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -241,10 +602,17 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["task_id", "error"],
+          "required": [
+            "task_id",
+            "error"
+          ],
           "properties": {
-            "task_id": { "type": "string" },
-            "error": { "type": "string" }
+            "task_id": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            }
           }
         }
       },
@@ -256,13 +624,56 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "type": { "type": "string", "enum": ["analysis", "fix", "review", "test", "research", "synthesis"] },
-            "status": { "type": "string", "enum": ["pending", "claimed", "working", "blocked", "review", "completed", "failed", "cancelled"] },
-            "priority": { "type": "number", "enum": [0, 1, 2, 3, 4] },
-            "created_by": { "type": "string" },
-            "assigned_to": { "type": "string" },
-            "context_id": { "type": "string" },
-            "limit": { "type": "number" }
+            "type": {
+              "type": "string",
+              "enum": [
+                "analysis",
+                "fix",
+                "review",
+                "test",
+                "research",
+                "synthesis"
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "claimed",
+                "working",
+                "blocked",
+                "review",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "priority": {
+              "type": "number",
+              "enum": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ]
+            },
+            "created_by": {
+              "type": "string"
+            },
+            "assigned_to": {
+              "type": "string"
+            },
+            "context_id": {
+              "type": "string"
+            },
+            "instance_id": {
+              "type": "string",
+              "description": "Optional instance ID to scope results; defaults to all instances"
+            },
+            "limit": {
+              "type": "number"
+            }
           }
         }
       },
@@ -273,12 +684,23 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["id", "name"],
+          "required": [
+            "id",
+            "name"
+          ],
           "properties": {
-            "id": { "type": "string" },
-            "name": { "type": "string" },
-            "description": { "type": "string" },
-            "set_current": { "type": "boolean" }
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "set_current": {
+              "type": "boolean"
+            }
           }
         }
       },
@@ -289,7 +711,11 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "properties": { "context_id": { "type": "string" } }
+          "properties": {
+            "context_id": {
+              "type": "string"
+            }
+          }
         }
       },
       {
@@ -299,8 +725,14 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["context_id"],
-          "properties": { "context_id": { "type": "string" } }
+          "required": [
+            "context_id"
+          ],
+          "properties": {
+            "context_id": {
+              "type": "string"
+            }
+          }
         }
       },
       {
@@ -310,7 +742,11 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "properties": { "limit": { "type": "number" } }
+          "properties": {
+            "limit": {
+              "type": "number"
+            }
+          }
         }
       },
       {
@@ -318,7 +754,10 @@
         "displayName": "Blackboard Stats",
         "description": "Get statistics about the blackboard (agents, findings, tasks)",
         "canBeReferencedInPrompt": true,
-        "inputSchema": { "type": "object", "properties": {} }
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
       },
       {
         "name": "bb_connections",
@@ -327,10 +766,17 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["path"],
+          "required": [
+            "path"
+          ],
           "properties": {
-            "path": { "type": "string", "description": "Path to the entity" },
-            "depth": { "type": "number" }
+            "path": {
+              "type": "string",
+              "description": "Path to the entity"
+            },
+            "depth": {
+              "type": "number"
+            }
           }
         }
       },
@@ -341,15 +787,49 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["pattern_type", "pattern_value"],
+          "required": [
+            "pattern_type",
+            "pattern_value"
+          ],
           "properties": {
-            "agent_id": { "type": "string" },
-            "pattern_type": { "type": "string", "enum": ["topic", "entity", "agent", "status", "context"] },
-            "pattern_value": { "type": "string" },
-            "severity_filter": { "type": "array", "items": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] } },
-            "min_confidence": { "type": "number" },
-            "exclude_self": { "type": "boolean" },
-            "expires_in_hours": { "type": "number" }
+            "agent_id": {
+              "type": "string"
+            },
+            "pattern_type": {
+              "type": "string",
+              "enum": [
+                "topic",
+                "entity",
+                "agent",
+                "status",
+                "context"
+              ]
+            },
+            "pattern_value": {
+              "type": "string"
+            },
+            "severity_filter": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              }
+            },
+            "min_confidence": {
+              "type": "number"
+            },
+            "exclude_self": {
+              "type": "boolean"
+            },
+            "expires_in_hours": {
+              "type": "number"
+            }
           }
         }
       },
@@ -360,10 +840,16 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["subscription_id"],
+          "required": [
+            "subscription_id"
+          ],
           "properties": {
-            "agent_id": { "type": "string" },
-            "subscription_id": { "type": "string" }
+            "agent_id": {
+              "type": "string"
+            },
+            "subscription_id": {
+              "type": "string"
+            }
           }
         }
       },
@@ -374,7 +860,11 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "properties": { "agent_id": { "type": "string" } }
+          "properties": {
+            "agent_id": {
+              "type": "string"
+            }
+          }
         }
       },
       {
@@ -385,9 +875,15 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "agent_id": { "type": "string" },
-            "limit": { "type": "number" },
-            "mark_as_read": { "type": "boolean" }
+            "agent_id": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "number"
+            },
+            "mark_as_read": {
+              "type": "boolean"
+            }
           }
         }
       },
@@ -398,7 +894,11 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "properties": { "agent_id": { "type": "string" } }
+          "properties": {
+            "agent_id": {
+              "type": "string"
+            }
+          }
         }
       },
       {
@@ -408,10 +908,16 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["notification_id"],
+          "required": [
+            "notification_id"
+          ],
           "properties": {
-            "agent_id": { "type": "string" },
-            "notification_id": { "type": "string" }
+            "agent_id": {
+              "type": "string"
+            },
+            "notification_id": {
+              "type": "string"
+            }
           }
         }
       },
@@ -422,7 +928,11 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "properties": { "agent_id": { "type": "string" } }
+          "properties": {
+            "agent_id": {
+              "type": "string"
+            }
+          }
         }
       },
       {
@@ -432,10 +942,16 @@
         "canBeReferencedInPrompt": true,
         "inputSchema": {
           "type": "object",
-          "required": ["notification_id"],
+          "required": [
+            "notification_id"
+          ],
           "properties": {
-            "agent_id": { "type": "string" },
-            "notification_id": { "type": "string" }
+            "agent_id": {
+              "type": "string"
+            },
+            "notification_id": {
+              "type": "string"
+            }
           }
         }
       }

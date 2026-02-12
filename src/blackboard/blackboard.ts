@@ -187,12 +187,12 @@ export class YamsBlackboard {
         }
     }
 
-    async listAgents(): Promise<AgentCard[]> {
+    async listAgents(instanceId?: string): Promise<AgentCard[]> {
         try {
-            const docs = await this.listDocs(
-                ["agent", this.instanceTag()],
-                100,
-            );
+            const tags = ["agent"] as string[];
+            if (instanceId) tags.push(`inst:${instanceId}`);
+
+            const docs = await this.listDocs(tags, 100);
             const agents: AgentCard[] = [];
             for (const doc of docs) {
                 try {
@@ -339,7 +339,8 @@ ${finding.content}
     }
 
     async queryFindings(query: FindingQuery): Promise<Finding[]> {
-        const tags = ["finding", this.instanceTag()];
+        const tags = ["finding"] as string[];
+        if (query.instance_id) tags.push(`inst:${query.instance_id}`);
         if (query.topic) tags.push(`topic:${query.topic}`);
         if (query.agent_id) tags.push(`agent:${query.agent_id}`);
         if (query.context_id) tags.push(`ctx:${query.context_id}`);
@@ -381,11 +382,11 @@ ${finding.content}
 
     async searchFindings(
         query: string,
-        opts?: { topic?: string; limit?: number },
+        opts?: { topic?: string; limit?: number; instance_id?: string },
     ): Promise<Finding[]> {
-        const tags = opts?.topic
-            ? ["finding", this.instanceTag(), `topic:${opts.topic}`]
-            : ["finding", this.instanceTag()];
+        const tags = ["finding"] as string[];
+        if (opts?.topic) tags.push(`topic:${opts.topic}`);
+        if (opts?.instance_id) tags.push(`inst:${opts.instance_id}`);
         const limit = opts?.limit || 10;
 
         try {
@@ -516,7 +517,8 @@ ${finding.content}
     }
 
     async queryTasks(query: TaskQuery): Promise<Task[]> {
-        const tags = ["task", this.instanceTag()];
+        const tags = ["task"] as string[];
+        if (query.instance_id) tags.push(`inst:${query.instance_id}`);
         if (query.type) tags.push(`type:${query.type}`);
         if (query.status) tags.push(`status:${query.status}`);
         if (query.priority !== undefined)
@@ -944,11 +946,11 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
 
     async searchTasks(
         query: string,
-        opts?: { type?: string; limit?: number },
+        opts?: { type?: string; limit?: number; instance_id?: string },
     ): Promise<Task[]> {
-        const tags = opts?.type
-            ? ["task", this.instanceTag(), `type:${opts.type}`]
-            : ["task", this.instanceTag()];
+        const tags = ["task"] as string[];
+        if (opts?.type) tags.push(`type:${opts.type}`);
+        if (opts?.instance_id) tags.push(`inst:${opts.instance_id}`);
         const limit = opts?.limit || 10;
 
         try {
@@ -977,9 +979,10 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
 
     async search(
         query: string,
-        opts?: { limit?: number },
+        opts?: { limit?: number; instance_id?: string },
     ): Promise<{ findings: Finding[]; tasks: Task[] }> {
-        const tags = [this.instanceTag()];
+        const tags: string[] = [];
+        if (opts?.instance_id) tags.push(`inst:${opts.instance_id}`);
         const limit = opts?.limit || 20;
 
         try {
@@ -1023,11 +1026,15 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
 
     async grep(
         pattern: string,
-        opts?: { entity?: "finding" | "task"; limit?: number },
+        opts?: {
+            entity?: "finding" | "task";
+            limit?: number;
+            instance_id?: string;
+        },
     ): Promise<Array<{ name: string; matches: string[] }>> {
-        const tags = opts?.entity
-            ? [opts.entity, this.instanceTag()]
-            : [this.instanceTag()];
+        const tags: string[] = [];
+        if (opts?.entity) tags.push(opts.entity);
+        if (opts?.instance_id) tags.push(`inst:${opts.instance_id}`);
 
         try {
             const result = await this.client.grep({
@@ -1092,10 +1099,7 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
 
         let contextCount = 0;
         try {
-            const ctxDocs = await this.listDocs(
-                ["context", this.instanceTag()],
-                1000,
-            );
+            const ctxDocs = await this.listDocs(["context"], 1000);
             contextCount = ctxDocs.length;
         } catch {
             /* contexts unavailable */

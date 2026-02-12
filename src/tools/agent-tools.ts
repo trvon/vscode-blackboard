@@ -48,17 +48,19 @@ class RegisterAgentTool implements vscode.LanguageModelTool<RegisterAgentInput> 
 // bb_list_agents
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-interface ListAgentsInput {}
+interface ListAgentsInput {
+    instance_id?: string;
+}
 
 class ListAgentsTool implements vscode.LanguageModelTool<ListAgentsInput> {
     constructor(private readonly bb: YamsBlackboard) {}
 
     async invoke(
-        _options: vscode.LanguageModelToolInvocationOptions<ListAgentsInput>,
+        options: vscode.LanguageModelToolInvocationOptions<ListAgentsInput>,
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
-        const agents = await this.bb.listAgents();
+        const input = (options.input ?? {}) as Partial<ListAgentsInput>;
+        const agents = await this.bb.listAgents(input.instance_id);
         if (agents.length === 0) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart("No agents registered yet."),

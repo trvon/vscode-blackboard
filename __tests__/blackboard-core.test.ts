@@ -203,7 +203,7 @@ test("registerAgent is idempotent even if capabilities reorder", async () => {
     assert.equal(fake.addCalls.length, 1);
 });
 
-test("listAgents returns parsable agent docs and skips malformed", async () => {
+test("listAgents returns parsable agent docs and skips malformed with optional instance filter", async () => {
     const fake = new FakeClient();
     const bb = createBb(fake, "inst-xyz");
 
@@ -224,7 +224,7 @@ test("listAgents returns parsable agent docs and skips malformed", async () => {
     );
     fake.seedTaggedDoc("agents/bad.json", "not-json", ["agent", "inst:inst-xyz"]);
 
-    const agents = await bb.listAgents();
+    const agents = await bb.listAgents("inst-xyz");
 
     assert.equal(Array.isArray(agents), true);
     assert.equal(agents.length, 1);

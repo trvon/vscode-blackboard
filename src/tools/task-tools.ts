@@ -153,8 +153,16 @@ class ClaimTaskTool implements vscode.LanguageModelTool<ClaimTaskInput> {
 
 interface UpdateTaskInput {
     task_id: string;
-    status: string;
+    status?: string;
     error?: string;
+    findings?: string[];
+    artifacts?: {
+        name: string;
+        type: "file" | "data" | "report";
+        path?: string;
+        hash?: string;
+        mime_type?: string;
+    }[];
 }
 
 class UpdateTaskTool implements vscode.LanguageModelTool<UpdateTaskInput> {
@@ -165,18 +173,26 @@ class UpdateTaskTool implements vscode.LanguageModelTool<UpdateTaskInput> {
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<UpdateTaskInput>;
-        const { task_id, status, error } = input;
-        if (!task_id || !status) {
+        const { task_id, status, error, findings, artifacts } = input;
+        if (!task_id) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
-                    "Invalid input: expected { task_id: string, status: string, error?: string }",
+                    "Invalid input: expected { task_id: string, status?: string, error?: string, findings?: string[], artifacts?: Artifact[] }",
                 ),
             ]);
         }
-        const task = await this.bb.updateTask(task_id, {
-            status: status as TaskStatus,
-            error,
-        });
+        const updates: Partial<{
+            status: TaskStatus;
+            error: string;
+            findings: string[];
+            artifacts: UpdateTaskInput["artifacts"];
+        }> = {};
+        if (status) updates.status = status as TaskStatus;
+        if (typeof error === "string") updates.error = error;
+        if (findings) updates.findings = findings;
+        if (artifacts) updates.artifacts = artifacts;
+
+        const task = await this.bb.updateTask(task_id, updates);
         if (!task) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(`Task not found: ${task_id}`),
@@ -197,6 +213,13 @@ class UpdateTaskTool implements vscode.LanguageModelTool<UpdateTaskInput> {
 interface CompleteTaskInput {
     task_id: string;
     findings?: string[];
+    artifacts?: {
+        name: string;
+        type: "file" | "data" | "report";
+        path?: string;
+        hash?: string;
+        mime_type?: string;
+    }[];
 }
 
 class CompleteTaskTool implements vscode.LanguageModelTool<CompleteTaskInput> {
@@ -207,7 +230,7 @@ class CompleteTaskTool implements vscode.LanguageModelTool<CompleteTaskInput> {
         _token: vscode.CancellationToken,
     ): Promise<vscode.LanguageModelToolResult> {
         const input = (options.input ?? {}) as Partial<CompleteTaskInput>;
-        const { task_id, findings } = input;
+        const { task_id, findings, artifacts } = input;
         if (!task_id) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(
@@ -215,13 +238,16 @@ class CompleteTaskTool implements vscode.LanguageModelTool<CompleteTaskInput> {
                 ),
             ]);
         }
-        const task = await this.bb.completeTask(task_id, { findings });
+        const task = await this.bb.completeTask(task_id, {
+            findings,
+            artifacts,
+        });
         if (!task) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(`Task not found: ${task_id}`),
             ]);
         }
-        const text = `Task completed: ${task.id}\nTitle: ${task.title}\n${findings?.length ? `Findings: ${findings.join(", ")}` : ""}`;
+        const text = `Task completed: ${task.id}\nTitle: ${task.title}\n${findings?.length ? `Findings: ${findings.join(", ")}` : ""}${artifacts?.length ? `\nArtifacts: ${artifacts.map((a) => a.name).join(", ")}` : ""}`;
         return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart(text),
         ]);
@@ -278,6 +304,7 @@ interface QueryTasksInput {
     created_by?: string;
     assigned_to?: string;
     context_id?: string;
+    instance_id?: string;
     limit?: number;
 }
 
@@ -299,6 +326,7 @@ class QueryTasksTool implements vscode.LanguageModelTool<QueryTasksInput> {
             created_by: args.created_by,
             assigned_to: args.assigned_to,
             context_id: args.context_id || this.getCtx(),
+            instance_id: args.instance_id,
             limit: args.limit ?? 20,
             offset: 0,
         });
@@ -329,6 +357,7 @@ class QueryTasksTool implements vscode.LanguageModelTool<QueryTasksInput> {
 interface SearchTasksInput {
     query: string;
     type?: string;
+    instance_id?: string;
     limit?: number;
 }
 
@@ -350,6 +379,7 @@ class SearchTasksTool implements vscode.LanguageModelTool<SearchTasksInput> {
         const tasks = await this.bb.searchTasks(args.query, {
             type: args.type,
             limit: args.limit ?? 10,
+            instance_id: args.instance_id,
         });
 
         if (tasks.length === 0) {

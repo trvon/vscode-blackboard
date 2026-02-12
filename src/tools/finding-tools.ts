@@ -94,6 +94,7 @@ interface QueryFindingsInput {
     topic?: string;
     agent_id?: string;
     context_id?: string;
+    instance_id?: string;
     status?: string;
     severity?: string[];
     min_confidence?: number;
@@ -116,6 +117,7 @@ class QueryFindingsTool implements vscode.LanguageModelTool<QueryFindingsInput> 
             topic: args.topic as FindingTopic | undefined,
             agent_id: args.agent_id,
             context_id: args.context_id || this.getCtx(),
+            instance_id: args.instance_id,
             status: args.status as FindingStatus | undefined,
             severity: args.severity as FindingSeverity[] | undefined,
             min_confidence: args.min_confidence,
@@ -150,6 +152,7 @@ class QueryFindingsTool implements vscode.LanguageModelTool<QueryFindingsInput> 
 interface SearchFindingsInput {
     query: string;
     topic?: string;
+    instance_id?: string;
     limit?: number;
 }
 
@@ -171,6 +174,7 @@ class SearchFindingsTool implements vscode.LanguageModelTool<SearchFindingsInput
         const findings = await this.bb.searchFindings(args.query, {
             topic: args.topic,
             limit: args.limit ?? 10,
+            instance_id: args.instance_id,
         });
 
         if (findings.length === 0) {
