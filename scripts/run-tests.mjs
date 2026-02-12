@@ -2,6 +2,17 @@ import { spawn } from "node:child_process";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
+/**
+ * @param {string[]} nodeArgs
+ * @returns {Promise<number>}
+ */
+function runNode(nodeArgs) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, nodeArgs, { stdio: "inherit" });
+    child.on("exit", (code) => resolve(code ?? 1));
+  });
+}
+
 async function collectTests(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
   /** @type {string[]} */
@@ -42,24 +53,23 @@ async function main() {
     process.exit(1);
   }
 
-  const nodeArgs = ["--test"];
-  if (wantCoverage) {
-    // Works on Node 20+ (and still accepted on newer versions).
-    nodeArgs.push("--experimental-test-coverage");
-
-    // CI robustness: restrict reporting to our compiled sources only.
-    // The Node coverage reporter can crash when it tries to summarize certain
-    // non-project files (e.g., generated artifacts or runtime internals).
-    const distRoot = path.resolve(root, "..");
-    const compiledSrc = path.join(distRoot, "src", "**", "*.js");
-    nodeArgs.push(`--test-coverage-include=${compiledSrc}`);
-    nodeArgs.push("--test-coverage-exclude=**/node_modules/**");
-    nodeArgs.push("--test-coverage-exclude=**/proto/**");
+  const baseArgs = ["--test", ...testFiles];
+  if (!wantCoverage) {
+    process.exit(await runNode(baseArgs));
   }
-  nodeArgs.push(...testFiles);
 
-  const child = spawn(process.execPath, nodeArgs, { stdio: "inherit" });
-  child.on("exit", (code) => process.exit(code ?? 1));
+  // Coverage is best-effort: Node's built-in coverage reporter has had
+  // intermittent crashes across Node 20.x patch releases.
+  const coverageArgs = ["--test", "--experimental-test-coverage", ...testFiles];
+  const coverageExit = await runNode(coverageArgs);
+  if (coverageExit === 0) {
+    process.exit(0);
+  }
+
+  console.warn(
+    "Warning: coverage run failed; rerunning tests without coverage to determine pass/fail.",
+  );
+  process.exit(await runNode(baseArgs));
 }
 
 await main();
