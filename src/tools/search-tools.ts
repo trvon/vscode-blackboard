@@ -1,9 +1,6 @@
 /**
- * Search & utility tools: bb_recent_activity, bb_stats, bb_connections
- *
- * Note: bb_search and bb_grep are not in the package.json tool declarations
- * but are provided here for completeness since the OpenCode plugin has them.
- * They will only be registered if declared in contributes.languageModelTools.
+ * Search & utility tools: bb_recent_activity, bb_stats, bb_connections,
+ * bb_search, bb_grep
  */
 
 import * as vscode from "vscode";
@@ -137,6 +134,127 @@ ${JSON.stringify(graph.nodes, null, 2)}`;
 }
 
 // ---------------------------------------------------------------------------
+// bb_search
+// ---------------------------------------------------------------------------
+
+interface SearchInput {
+    query: string;
+    instance_id?: string;
+    limit?: number;
+}
+
+class SearchTool implements vscode.LanguageModelTool<SearchInput> {
+    constructor(private readonly bb: YamsBlackboard) {}
+
+    async invoke(
+        options: vscode.LanguageModelToolInvocationOptions<SearchInput>,
+        _token: vscode.CancellationToken,
+    ): Promise<vscode.LanguageModelToolResult> {
+        const input = (options.input ?? {}) as Partial<SearchInput>;
+        const query = input.query?.trim();
+        if (!query) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { query: string, instance_id?: string, limit?: number }",
+                ),
+            ]);
+        }
+
+        const results = await this.bb.search(query, {
+            instance_id: input.instance_id,
+            limit: input.limit ?? 20,
+        });
+
+        const output: string[] = [];
+
+        if (results.findings.length > 0) {
+            output.push("### Findings");
+            output.push(
+                results.findings
+                    .map(
+                        (f) =>
+                            `[${f.id}] ${f.topic.toUpperCase()} | ${f.title}\n  ${f.content.slice(0, 150)}${f.content.length > 150 ? "..." : ""}`,
+                    )
+                    .join("\n\n"),
+            );
+        }
+
+        if (results.tasks.length > 0) {
+            output.push("\n### Tasks");
+            output.push(
+                results.tasks
+                    .map(
+                        (t) =>
+                            `[${t.id}] P${t.priority} ${t.type.toUpperCase()} | ${t.title}\n  Status: ${t.status}`,
+                    )
+                    .join("\n\n"),
+            );
+        }
+
+        if (output.length === 0) {
+            output.push("No results match the search.");
+        }
+
+        return new vscode.LanguageModelToolResult([
+            new vscode.LanguageModelTextPart(output.join("\n")),
+        ]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// bb_grep
+// ---------------------------------------------------------------------------
+
+interface GrepInput {
+    pattern: string;
+    entity?: "finding" | "task";
+    instance_id?: string;
+    limit?: number;
+}
+
+class GrepTool implements vscode.LanguageModelTool<GrepInput> {
+    constructor(private readonly bb: YamsBlackboard) {}
+
+    async invoke(
+        options: vscode.LanguageModelToolInvocationOptions<GrepInput>,
+        _token: vscode.CancellationToken,
+    ): Promise<vscode.LanguageModelToolResult> {
+        const input = (options.input ?? {}) as Partial<GrepInput>;
+        const pattern = input.pattern?.trim();
+        if (!pattern) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(
+                    "Invalid input: expected { pattern: string, entity?: 'finding'|'task', instance_id?: string, limit?: number }",
+                ),
+            ]);
+        }
+
+        const results = await this.bb.grep(pattern, {
+            entity: input.entity,
+            instance_id: input.instance_id,
+            limit: input.limit ?? 50,
+        });
+
+        if (results.length === 0) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart("No matches found."),
+            ]);
+        }
+
+        const text = results
+            .map(
+                (r) =>
+                    `**${r.name}**\n${r.matches.slice(0, 5).map((m) => `  ${m}`).join("\n")}${r.matches.length > 5 ? `\n  ... and ${r.matches.length - 5} more matches` : ""}`,
+            )
+            .join("\n\n");
+
+        return new vscode.LanguageModelToolResult([
+            new vscode.LanguageModelTextPart(text),
+        ]);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -148,5 +266,7 @@ export function registerSearchTools(
         vscode.lm.registerTool("bb_recent_activity", new RecentActivityTool(bb)),
         vscode.lm.registerTool("bb_stats", new StatsTool(bb)),
         vscode.lm.registerTool("bb_connections", new ConnectionsTool(bb)),
+        vscode.lm.registerTool("bb_search", new SearchTool(bb)),
+        vscode.lm.registerTool("bb_grep", new GrepTool(bb)),
     );
 }

@@ -54,7 +54,7 @@ You have access to the following tool families (all prefixed with "bb_"):
 **Findings:** bb_post_finding, bb_query_findings, bb_search_findings, bb_get_finding, bb_acknowledge_finding, bb_resolve_finding
 **Tasks:** bb_create_task, bb_get_ready_tasks, bb_claim_task, bb_update_task, bb_complete_task, bb_fail_task, bb_query_tasks
 **Contexts:** bb_create_context, bb_get_context_summary, bb_set_context
-**Search & Stats:** bb_recent_activity, bb_stats, bb_connections
+**Search & Stats:** bb_recent_activity, bb_stats, bb_connections, bb_search, bb_grep
 **Notifications:** bb_subscribe, bb_unsubscribe, bb_list_subscriptions, bb_check_notifications, bb_notification_count, bb_mark_notification_read, bb_mark_all_read, bb_dismiss_notification
 
 When users ask about blackboard state, invoke the appropriate tool(s) and present the results clearly.
@@ -88,6 +88,8 @@ const BB_TOOL_NAMES = [
     "bb_recent_activity",
     "bb_stats",
     "bb_connections",
+    "bb_search",
+    "bb_grep",
     "bb_subscribe",
     "bb_unsubscribe",
     "bb_list_subscriptions",
@@ -151,12 +153,28 @@ async function handleRequest(
         .map((name) => bbTools.find((t) => t.name === name))
         .filter(Boolean) as typeof bbTools;
 
-    for (const tool of referencedTools) {
+    // If no explicit tool refs were attached, run one lightweight context preflight
+    // to improve knowledge sharing and handoff quality.
+    const preflightTools: typeof bbTools = [];
+    if (referencedTools.length === 0) {
+        const recent = bbTools.find((t) => t.name === "bb_recent_activity");
+        if (recent) preflightTools.push(recent);
+    }
+
+    const toolsToPrime = [...new Map(
+        [...preflightTools, ...referencedTools].map((t) => [t.name, t]),
+    ).values()];
+
+    for (const tool of toolsToPrime) {
         if (token.isCancellationRequested) {
             return;
         }
 
-        stream.progress(`Running ${tool.name}...`);
+        stream.progress(
+            tool.name === "bb_recent_activity"
+                ? "Collecting blackboard context..."
+                : `Running ${tool.name}...`,
+        );
 
         const toolPrepMessages = [
             ...messages,

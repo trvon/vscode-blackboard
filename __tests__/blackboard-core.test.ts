@@ -122,8 +122,60 @@ class FakeClient {
         return { ok: true };
     }
 
-    async search(): Promise<any> {
-        return { results: [] };
+    async search(opts: {
+        query: string;
+        tags?: string[];
+        matchAllTags?: boolean;
+        limit?: number;
+    }): Promise<any> {
+        const query = (opts.query ?? "").toLowerCase();
+        const tags = opts.tags ?? [];
+        const matchAll = opts.matchAllTags ?? false;
+        const limit = opts.limit ?? 20;
+
+        const results: Array<{ path: string }> = [];
+        for (const [name, doc] of this.docs.entries()) {
+            if (tags.length > 0) {
+                const hasAll = tags.every((t) => doc.tags.includes(t));
+                const hasAny = tags.some((t) => doc.tags.includes(t));
+                if (matchAll ? !hasAll : !hasAny) continue;
+            }
+
+            const hay = `${name}\n${doc.content}`.toLowerCase();
+            if (!hay.includes(query)) continue;
+
+            results.push({ path: name });
+            if (results.length >= limit) break;
+        }
+
+        return { results };
+    }
+
+    async grep(opts: {
+        pattern: string;
+        filterTags?: string[];
+        matchAllTags?: boolean;
+    }): Promise<any> {
+        const pattern = opts.pattern ?? "";
+        const filterTags = opts.filterTags ?? [];
+        const matchAll = opts.matchAllTags ?? false;
+        const re = new RegExp(pattern, "i");
+
+        const matches: Array<{ file: string; line: Uint8Array }> = [];
+        for (const [name, doc] of this.docs.entries()) {
+            if (filterTags.length > 0) {
+                const hasAll = filterTags.every((t) => doc.tags.includes(t));
+                const hasAny = filterTags.some((t) => doc.tags.includes(t));
+                if (matchAll ? !hasAll : !hasAny) continue;
+            }
+
+            for (const line of doc.content.split("\n")) {
+                if (!re.test(line)) continue;
+                matches.push({ file: name, line: new TextEncoder().encode(line) });
+            }
+        }
+
+        return { matches };
     }
 
     seedDoc(name: string, content: string): void {
@@ -313,4 +365,92 @@ test("queryFindings filters by min_confidence", async () => {
 
     assert.equal(results.length, 1);
     assert.equal(results[0]!.id, "f-hi");
+});
+
+test("search returns mixed finding/task results with optional instance filter", async () => {
+    const fake = new FakeClient();
+    const bb = createBb(fake, "inst-srch");
+
+    const findingMd = `---\n` +
+        `id: ${JSON.stringify("f-1")}\n` +
+        `agent_id: ${JSON.stringify("a1")}\n` +
+        `topic: ${JSON.stringify("security")}\n` +
+        `confidence: 0.9\n` +
+        `status: ${JSON.stringify("published")}\n` +
+        `scope: ${JSON.stringify("persistent")}\n` +
+        `created_at: ${JSON.stringify("2026-01-01T00:00:00.000Z")}\n` +
+        `---\n\n# SQL Injection\n\nquery is unsafe\n`;
+
+    fake.seedTaggedDoc(
+        "findings/security/f-1.md",
+        findingMd,
+        ["finding", "inst:inst-srch", "topic:security"],
+    );
+    fake.seedTaggedDoc(
+        "tasks/t-1.json",
+        JSON.stringify({
+            id: "t-1",
+            title: "Fix SQL query",
+            type: "fix",
+            status: "pending",
+            priority: 1,
+            created_by: "a1",
+        }),
+        ["task", "inst:inst-srch", "type:fix", "status:pending"],
+    );
+    fake.seedTaggedDoc(
+        "tasks/t-other.json",
+        JSON.stringify({
+            id: "t-other",
+            title: "Different instance",
+            type: "fix",
+            status: "pending",
+            priority: 2,
+            created_by: "a1",
+        }),
+        ["task", "inst:other", "type:fix", "status:pending"],
+    );
+
+    const all = await bb.search("sql", { limit: 20 });
+    assert.equal(all.findings.length, 1);
+    assert.equal(all.tasks.length, 1);
+
+    const scoped = await bb.search("sql", {
+        instance_id: "inst-srch",
+        limit: 20,
+    });
+    assert.equal(scoped.findings.length, 1);
+    assert.equal(scoped.tasks.length, 1);
+    assert.equal(scoped.tasks[0]?.id, "t-1");
+});
+
+test("grep supports entity + instance filtering and groups by file", async () => {
+    const fake = new FakeClient();
+    const bb = createBb(fake, "inst-grp");
+
+    fake.seedTaggedDoc(
+        "findings/bug/f-1.md",
+        "first line\nneedle appears here\nlast line",
+        ["finding", "inst:inst-grp"],
+    );
+    fake.seedTaggedDoc(
+        "tasks/t-1.json",
+        "{\"title\":\"needle task\"}",
+        ["task", "inst:inst-grp"],
+    );
+    fake.seedTaggedDoc(
+        "findings/bug/f-other.md",
+        "needle but other instance",
+        ["finding", "inst:other"],
+    );
+
+    const findingOnly = await bb.grep("needle", {
+        entity: "finding",
+        instance_id: "inst-grp",
+        limit: 50,
+    });
+
+    assert.equal(findingOnly.length, 1);
+    assert.equal(findingOnly[0]?.name, "findings/bug/f-1.md");
+    assert.ok((findingOnly[0]?.matches ?? []).some((m) => m.includes("needle")));
 });

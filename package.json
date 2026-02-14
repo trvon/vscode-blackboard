@@ -781,6 +781,63 @@
         }
       },
       {
+        "name": "bb_search",
+        "displayName": "Blackboard Search",
+        "description": "Search blackboard content using natural language across findings and tasks",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "query"
+          ],
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Natural language search query"
+            },
+            "instance_id": {
+              "type": "string",
+              "description": "Optional instance ID to scope results"
+            },
+            "limit": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      {
+        "name": "bb_grep",
+        "displayName": "Blackboard Grep",
+        "description": "Search blackboard content using regex/pattern matching",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "pattern"
+          ],
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "Regex pattern to search for"
+            },
+            "entity": {
+              "type": "string",
+              "enum": [
+                "finding",
+                "task"
+              ]
+            },
+            "instance_id": {
+              "type": "string",
+              "description": "Optional instance ID to scope results"
+            },
+            "limit": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      {
         "name": "bb_subscribe",
         "displayName": "Subscribe",
         "description": "Subscribe to blackboard events matching a pattern. Get notified when findings/tasks matching your criteria are created or updated.",
