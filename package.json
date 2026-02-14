@@ -2,7 +2,7 @@
   "name": "vscode-blackboard",
   "displayName": "YAMS Blackboard",
   "description": "Multi-agent coordination via YAMS blackboard — post findings, claim tasks, and discover agent work through direct daemon IPC.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "yamsmemoryai",
   "license": "GPL-3.0-only",
   "repository": {
