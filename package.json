@@ -49,6 +49,7 @@
       {
         "name": "bb_register_agent",
         "displayName": "Register Agent",
+        "modelDescription": "Register an agent identity and capabilities on the blackboard.",
         "description": "Register an agent's identity and capabilities on the blackboard. Call this when starting work to announce your presence.",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -80,6 +81,7 @@
       {
         "name": "bb_list_agents",
         "displayName": "List Agents",
+        "modelDescription": "List registered agents and their capabilities.",
         "description": "List all registered agents and their capabilities",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -95,6 +97,7 @@
       {
         "name": "bb_post_finding",
         "displayName": "Post Finding",
+        "modelDescription": "Create a blackboard finding with topic, title, and content.",
         "description": "Post a finding to the shared blackboard for other agents to discover. Use this to share discoveries, observations, issues, or insights.",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -211,6 +214,7 @@
       {
         "name": "bb_query_findings",
         "displayName": "Query Findings",
+        "modelDescription": "Query findings by topic, status, severity, agent, or context.",
         "description": "Query findings from the blackboard by topic, agent, severity, or context. Use to discover what other agents have found.",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -283,6 +287,7 @@
       {
         "name": "bb_search_findings",
         "displayName": "Search Findings",
+        "modelDescription": "Search findings by natural-language query.",
         "description": "Search findings using natural language. Uses semantic search to find relevant findings.",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -323,6 +328,7 @@
       {
         "name": "bb_get_finding",
         "displayName": "Get Finding",
+        "modelDescription": "Fetch a finding by ID.",
         "description": "Get full details of a specific finding by ID",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -340,6 +346,7 @@
       {
         "name": "bb_acknowledge_finding",
         "displayName": "Acknowledge Finding",
+        "modelDescription": "Mark a finding as acknowledged.",
         "description": "Mark a finding as acknowledged (you've seen it)",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -360,6 +367,7 @@
       {
         "name": "bb_resolve_finding",
         "displayName": "Resolve Finding",
+        "modelDescription": "Mark a finding as resolved with a resolution note.",
         "description": "Mark a finding as resolved with an explanation",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -384,6 +392,7 @@
       {
         "name": "bb_create_task",
         "displayName": "Create Task",
+        "modelDescription": "Create a blackboard task for agents to claim and execute.",
         "description": "Create a new task on the blackboard for agents to claim and work on",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -438,6 +447,7 @@
       {
         "name": "bb_get_ready_tasks",
         "displayName": "Get Ready Tasks",
+        "modelDescription": "List pending tasks that are ready to be worked on.",
         "description": "Get tasks that are ready to work on (pending, no unmet dependencies). Use this to find work.",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -452,6 +462,7 @@
       {
         "name": "bb_claim_task",
         "displayName": "Claim Task",
+        "modelDescription": "Claim a pending task.",
         "description": "Claim a pending task to work on it",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -472,6 +483,7 @@
       {
         "name": "bb_update_task",
         "displayName": "Update Task",
+        "modelDescription": "Update task status and optional execution details.",
         "description": "Update the status of a task you're working on",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -543,6 +555,7 @@
       {
         "name": "bb_complete_task",
         "displayName": "Complete Task",
+        "modelDescription": "Mark a task as completed.",
         "description": "Mark a task as completed, optionally with findings or artifacts",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -598,6 +611,7 @@
       {
         "name": "bb_fail_task",
         "displayName": "Fail Task",
+        "modelDescription": "Mark a task as failed with an error message.",
         "description": "Mark a task as failed with an error message",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -619,6 +633,7 @@
       {
         "name": "bb_query_tasks",
         "displayName": "Query Tasks",
+        "modelDescription": "Query tasks by type, status, priority, assignee, or context.",
         "description": "Query tasks by type, status, priority, or assignee",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -680,6 +695,7 @@
       {
         "name": "bb_create_context",
         "displayName": "Create Context",
+        "modelDescription": "Create a context to group related findings and tasks.",
         "description": "Create a new context to group related findings and tasks together",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -707,6 +723,7 @@
       {
         "name": "bb_get_context_summary",
         "displayName": "Get Context Summary",
+        "modelDescription": "Summarize findings, tasks, and agents in a context.",
         "description": "Get a summary of a context including findings, tasks, and agents",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -721,6 +738,7 @@
       {
         "name": "bb_set_context",
         "displayName": "Set Context",
+        "modelDescription": "Set the current working context.",
         "description": "Set the current working context for findings and tasks",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -738,6 +756,7 @@
       {
         "name": "bb_recent_activity",
         "displayName": "Recent Activity",
+        "modelDescription": "Get recent findings and task updates.",
         "description": "Get recent findings and task updates across all topics",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -752,6 +771,7 @@
       {
         "name": "bb_stats",
         "displayName": "Blackboard Stats",
+        "modelDescription": "Get aggregate blackboard statistics.",
         "description": "Get statistics about the blackboard (agents, findings, tasks)",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -762,6 +782,7 @@
       {
         "name": "bb_connections",
         "displayName": "Explore Connections",
+        "modelDescription": "Explore graph connections for a finding or document path.",
         "description": "Explore graph connections for a finding or document - see related code, findings, and concepts",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -783,6 +804,7 @@
       {
         "name": "bb_search",
         "displayName": "Blackboard Search",
+        "modelDescription": "Search blackboard findings and tasks using natural language.",
         "description": "Search blackboard content using natural language across findings and tasks",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -808,6 +830,7 @@
       {
         "name": "bb_grep",
         "displayName": "Blackboard Grep",
+        "modelDescription": "Search blackboard content with a regex pattern.",
         "description": "Search blackboard content using regex/pattern matching",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -840,6 +863,7 @@
       {
         "name": "bb_subscribe",
         "displayName": "Subscribe",
+        "modelDescription": "Create a subscription for matching blackboard events.",
         "description": "Subscribe to blackboard events matching a pattern. Get notified when findings/tasks matching your criteria are created or updated.",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -893,6 +917,7 @@
       {
         "name": "bb_unsubscribe",
         "displayName": "Unsubscribe",
+        "modelDescription": "Cancel an active subscription.",
         "description": "Cancel an active subscription",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -913,6 +938,7 @@
       {
         "name": "bb_list_subscriptions",
         "displayName": "List Subscriptions",
+        "modelDescription": "List active subscriptions for an agent.",
         "description": "List your active subscriptions",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -927,6 +953,7 @@
       {
         "name": "bb_check_notifications",
         "displayName": "Check Notifications",
+        "modelDescription": "Read notification mailbox entries.",
         "description": "Check your notification mailbox for new events.",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -947,6 +974,7 @@
       {
         "name": "bb_notification_count",
         "displayName": "Notification Count",
+        "modelDescription": "Get unread notification count.",
         "description": "Quick count of unread notifications without fetching details",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -961,6 +989,7 @@
       {
         "name": "bb_mark_notification_read",
         "displayName": "Mark Notification Read",
+        "modelDescription": "Mark one notification as read.",
         "description": "Mark a specific notification as read",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -981,6 +1010,7 @@
       {
         "name": "bb_mark_all_read",
         "displayName": "Mark All Read",
+        "modelDescription": "Mark all notifications as read.",
         "description": "Mark all notifications as read",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
@@ -995,6 +1025,7 @@
       {
         "name": "bb_dismiss_notification",
         "displayName": "Dismiss Notification",
+        "modelDescription": "Dismiss a notification permanently.",
         "description": "Dismiss a notification permanently (won't show in future queries)",
         "canBeReferencedInPrompt": true,
         "inputSchema": {
