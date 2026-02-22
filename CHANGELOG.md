@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/trvon/vscode-blackboard/compare/vscode-blackboard-v0.2.0...vscode-blackboard-v0.2.1) (2026-02-22)
+
+
+### Bug Fixes
+
+* Add modelDescription to all contributed bb tools ([c3b7ad6](https://github.com/trvon/vscode-blackboard/commit/c3b7ad69da7ba7c344e7921cd7b3e0cd456eb5e9))
+* default [@blackboard](https://github.com/blackboard) to read-only ([ff65f4e](https://github.com/trvon/vscode-blackboard/commit/ff65f4e18c0b4277e509e011c236bcada19ca65b))
+
 ## [0.2.0](https://github.com/trvon/vscode-blackboard/compare/vscode-blackboard-v0.1.0...vscode-blackboard-v0.2.0) (2026-02-14)
 
 
