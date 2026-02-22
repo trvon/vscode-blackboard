@@ -41,18 +41,20 @@ function buildSystemPrompt(defaultAgentId: string): string {
 multi-agent coordination blackboard built on YAMS.
 
 Autonomous operation guidelines:
-- Treat the user message as a task request and drive the blackboard proactively.
+- Default to read-only behavior: use search/query/stats tools first.
+- Only create or modify blackboard data (tasks/findings/contexts/subscriptions/notifications/agents)
+  when the user explicitly asks you to record/create/update something.
 - Prefer calling tools over asking the user for IDs.
 - You have a default agent identity available: agent_id = "${defaultAgentId}".
 - For tools that accept agent_id/created_by, you may omit them; the host will default them.
 - When you need a snapshot, use bb_stats and/or bb_recent_activity.
-- When creating work, prefer: bb_create_context -> bb_create_task -> bb_claim_task (if applicable) -> bb_post_finding.
+- When the user explicitly asks to create work, prefer: bb_create_context -> bb_create_task -> bb_claim_task (if applicable) -> bb_post_finding.
 
 You have access to the following tool families (all prefixed with "bb_"):
 
 **Agents:** bb_register_agent, bb_list_agents
 **Findings:** bb_post_finding, bb_query_findings, bb_search_findings, bb_get_finding, bb_acknowledge_finding, bb_resolve_finding
-**Tasks:** bb_create_task, bb_get_ready_tasks, bb_claim_task, bb_update_task, bb_complete_task, bb_fail_task, bb_query_tasks
+**Tasks:** bb_create_task, bb_get_ready_tasks, bb_claim_task, bb_update_task, bb_complete_task, bb_fail_task, bb_query_tasks, bb_search_tasks
 **Contexts:** bb_create_context, bb_get_context_summary, bb_set_context
 **Search & Stats:** bb_recent_activity, bb_stats, bb_connections, bb_search, bb_grep
 **Notifications:** bb_subscribe, bb_unsubscribe, bb_list_subscriptions, bb_check_notifications, bb_notification_count, bb_mark_notification_read, bb_mark_all_read, bb_dismiss_notification
@@ -82,6 +84,7 @@ const BB_TOOL_NAMES = [
     "bb_complete_task",
     "bb_fail_task",
     "bb_query_tasks",
+    "bb_search_tasks",
     "bb_create_context",
     "bb_get_context_summary",
     "bb_set_context",
@@ -99,6 +102,79 @@ const BB_TOOL_NAMES = [
     "bb_mark_all_read",
     "bb_dismiss_notification",
 ];
+
+const READ_ONLY_TOOL_NAMES = [
+    "bb_list_agents",
+    "bb_query_findings",
+    "bb_search_findings",
+    "bb_get_finding",
+    "bb_get_ready_tasks",
+    "bb_query_tasks",
+    "bb_search_tasks",
+    "bb_get_context_summary",
+    "bb_set_context",
+    "bb_recent_activity",
+    "bb_stats",
+    "bb_connections",
+    "bb_search",
+    "bb_grep",
+    "bb_list_subscriptions",
+    "bb_check_notifications",
+    "bb_notification_count",
+];
+
+const WRITE_TOOL_NAMES = [
+    "bb_register_agent",
+    "bb_post_finding",
+    "bb_acknowledge_finding",
+    "bb_resolve_finding",
+    "bb_create_task",
+    "bb_claim_task",
+    "bb_update_task",
+    "bb_complete_task",
+    "bb_fail_task",
+    "bb_create_context",
+    "bb_subscribe",
+    "bb_unsubscribe",
+    "bb_mark_notification_read",
+    "bb_mark_all_read",
+    "bb_dismiss_notification",
+];
+
+function isKnownToolName(name: string): boolean {
+    return BB_TOOL_NAMES.includes(name);
+}
+
+function shouldEnableWriteTools(request: vscode.ChatRequest): boolean {
+    const referenced = new Set(request.toolReferences.map((t) => t.name));
+    for (const t of WRITE_TOOL_NAMES) {
+        if (referenced.has(t)) return true;
+    }
+
+    const p = (request.prompt ?? "").toLowerCase();
+    if (!p) return false;
+
+    // Intent gating: only enable write tools when the user explicitly asks
+    // to create/record/update blackboard state.
+    const writeIntent =
+        /\b(post|record|log|save|store|create|open|file|add|update|resolve|acknowledge|claim|complete|fail|subscribe|unsubscribe)\b/.test(
+            p,
+        ) &&
+        /\b(finding|task|context|subscription|notification|agent|blackboard)\b/.test(
+            p,
+        );
+
+    return writeIntent;
+}
+
+function shouldRunPreflight(requestPrompt: string): boolean {
+    const p = (requestPrompt ?? "").toLowerCase();
+    if (!p.trim()) return false;
+    // Only preflight when the user is asking about current state.
+    return /\b(show|list|stats|status|recent|activity|progress|queue|pending|claimed|working|blocked|notifications|agents|findings|tasks)\b/.test(
+        p,
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Handler
@@ -130,8 +206,14 @@ async function handleRequest(
 
     // Build tool references for the tools we registered
     const allTools = vscode.lm.tools;
-    const bbTools = allTools.filter((t) =>
-        BB_TOOL_NAMES.includes(t.name),
+    const allowWrites = shouldEnableWriteTools(request);
+    const allowedNames = new Set(
+        allowWrites
+            ? [...READ_ONLY_TOOL_NAMES, ...WRITE_TOOL_NAMES]
+            : READ_ONLY_TOOL_NAMES,
+    );
+    const bbTools = allTools.filter(
+        (t) => allowedNames.has(t.name) && isKnownToolName(t.name),
     );
 
     // Assemble messages
@@ -157,8 +239,10 @@ async function handleRequest(
     // to improve knowledge sharing and handoff quality.
     const preflightTools: typeof bbTools = [];
     if (referencedTools.length === 0) {
-        const recent = bbTools.find((t) => t.name === "bb_recent_activity");
-        if (recent) preflightTools.push(recent);
+        if (shouldRunPreflight(request.prompt)) {
+            const recent = bbTools.find((t) => t.name === "bb_recent_activity");
+            if (recent) preflightTools.push(recent);
+        }
     }
 
     const toolsToPrime = [...new Map(

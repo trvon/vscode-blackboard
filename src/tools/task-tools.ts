@@ -351,7 +351,7 @@ class QueryTasksTool implements vscode.LanguageModelTool<QueryTasksInput> {
 }
 
 // ---------------------------------------------------------------------------
-// bb_search_tasks (not in package.json tools but in OpenCode plugin)
+// bb_search_tasks
 // ---------------------------------------------------------------------------
 
 interface SearchTasksInput {

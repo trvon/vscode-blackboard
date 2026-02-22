@@ -693,6 +693,43 @@
         }
       },
       {
+        "name": "bb_search_tasks",
+        "displayName": "Search Tasks",
+        "modelDescription": "Search tasks using natural-language query.",
+        "description": "Search tasks by natural-language query",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "query"
+          ],
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Natural language search query"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "analysis",
+                "fix",
+                "review",
+                "test",
+                "research",
+                "synthesis"
+              ]
+            },
+            "instance_id": {
+              "type": "string",
+              "description": "Optional instance ID to scope results"
+            },
+            "limit": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      {
         "name": "bb_create_context",
         "displayName": "Create Context",
         "modelDescription": "Create a context to group related findings and tasks.",
