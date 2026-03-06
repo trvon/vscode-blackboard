@@ -32,6 +32,19 @@ export class YamsBlackboard {
     private sessionName?: string;
     private sessionActive = false;
     readonly instanceId: string;
+    private readonly hydrationConcurrency = 6;
+    private readonly contentCacheTtlMs = 30_000;
+    private readonly contentCacheMaxEntries = 2048;
+    private readonly activeSubscriptionCacheTtlMs = 2_000;
+    private readonly contentCache = new Map<
+        string,
+        { content: string; hash?: string; expiresAt: number }
+    >();
+    private readonly inFlightContent = new Map<string, Promise<string>>();
+    private activeSubscriptionsCache?: {
+        subscriptions: Subscription[];
+        expiresAt: number;
+    };
 
     constructor(
         private client: YamsDaemonClient,
@@ -78,15 +91,15 @@ export class YamsBlackboard {
             tags,
             metadata: [...baseMeta, ...(metadata ?? [])],
         });
+        this.putCachedContent(name, content);
     }
 
     /**
      * Retrieve document content by name.
      * Replaces the old `yams cat <name>` shell call.
      */
-    private async cat(name: string): Promise<string> {
-        const resp = await this.client.cat({ name });
-        return new TextDecoder().decode(resp.content);
+    private async cat(name: string, expectedHash?: string): Promise<string> {
+        return this.catByName(name, expectedHash);
     }
 
     /**
@@ -105,6 +118,149 @@ export class YamsBlackboard {
             offset,
         });
         return resp.items;
+    }
+
+    private getCachedContent(name: string, expectedHash?: string): string | null {
+        const entry = this.contentCache.get(name);
+        if (!entry) {
+            return null;
+        }
+        if (entry.expiresAt < Date.now()) {
+            this.contentCache.delete(name);
+            return null;
+        }
+        if (expectedHash && entry.hash && entry.hash !== expectedHash) {
+            this.contentCache.delete(name);
+            return null;
+        }
+        return entry.content;
+    }
+
+    private putCachedContent(name: string, content: string, hash?: string): void {
+        this.contentCache.set(name, {
+            content,
+            hash,
+            expiresAt: Date.now() + this.contentCacheTtlMs,
+        });
+        while (this.contentCache.size > this.contentCacheMaxEntries) {
+            const oldest = this.contentCache.keys().next().value;
+            if (!oldest) {
+                break;
+            }
+            this.contentCache.delete(oldest);
+        }
+    }
+
+    private async catByName(name: string, expectedHash?: string): Promise<string> {
+        const cached = this.getCachedContent(name, expectedHash);
+        if (cached !== null) {
+            return cached;
+        }
+
+        const inFlightKey = `${name}:${expectedHash || ""}`;
+        const existing = this.inFlightContent.get(inFlightKey);
+        if (existing) {
+            return existing;
+        }
+
+        const op = this.client
+            .cat({ name })
+            .then((resp) => {
+                const content = new TextDecoder().decode(resp.content);
+                this.putCachedContent(name, content, expectedHash);
+                return content;
+            })
+            .finally(() => {
+                this.inFlightContent.delete(inFlightKey);
+            });
+        this.inFlightContent.set(inFlightKey, op);
+        return op;
+    }
+
+    private tryJsonParse<T>(content: string): T | null {
+        try {
+            return JSON.parse(content) as T;
+        } catch {
+            return null;
+        }
+    }
+
+    private parseFindingMarkdown(content: string): Finding | null {
+        const match = content.match(/^---\n([\s\S]*?)\n---\n\n# (.*?)\n\n([\s\S]*)$/);
+        if (!match) {
+            return null;
+        }
+
+        const frontmatter: Record<string, any> = {};
+        match[1].split("\n").forEach((line) => {
+            const [key, ...rest] = line.split(": ");
+            if (key && rest.length) {
+                try {
+                    frontmatter[key] = JSON.parse(rest.join(": "));
+                } catch {
+                    frontmatter[key] = rest.join(": ");
+                }
+            }
+        });
+
+        return {
+            ...frontmatter,
+            title: match[2],
+            content: match[3].trim(),
+        } as Finding;
+    }
+
+    private async mapLimit<T, U>(
+        items: T[],
+        limit: number,
+        fn: (item: T, index: number) => Promise<U>,
+    ): Promise<U[]> {
+        if (items.length === 0) {
+            return [];
+        }
+
+        const concurrency = Math.max(1, Math.min(limit, items.length));
+        const out: U[] = new Array(items.length);
+        let index = 0;
+
+        const worker = async () => {
+            while (true) {
+                const current = index;
+                index += 1;
+                if (current >= items.length) {
+                    return;
+                }
+                out[current] = await fn(items[current], current);
+            }
+        };
+
+        await Promise.all(Array.from({ length: concurrency }, () => worker()));
+        return out;
+    }
+
+    private async hydrateDocuments<T>(
+        docs: ListEntry[],
+        parser: (content: string, doc: ListEntry) => T | null,
+    ): Promise<T[]> {
+        const hydrated = await this.mapLimit(
+            docs,
+            this.hydrationConcurrency,
+            async (doc) => {
+                const name = doc.name;
+                if (!name) {
+                    return null;
+                }
+                const hash = (doc as any).hash as string | undefined;
+                try {
+                    const content = await this.catByName(name, hash);
+                    return parser(content, doc);
+                } catch {
+                    return null;
+                }
+            },
+        );
+
+        return hydrated.filter((v): v is T => v !== null);
     }
 
     /**
@@ -180,8 +336,8 @@ export class YamsBlackboard {
 
     async getAgent(agentId: string): Promise<AgentCard | null> {
         try {
-            const result = await this.cat(`agents/${agentId}.json`);
-            return JSON.parse(result);
+            const result = await this.catByName(`agents/${agentId}.json`);
+            return this.tryJsonParse<AgentCard>(result);
         } catch {
             return null;
         }
@@ -193,16 +349,9 @@ export class YamsBlackboard {
             if (instanceId) tags.push(`inst:${instanceId}`);
 
             const docs = await this.listDocs(tags, 100);
-            const agents: AgentCard[] = [];
-            for (const doc of docs) {
-                try {
-                    const content = await this.cat(doc.name);
-                    agents.push(JSON.parse(content));
-                } catch {
-                    /* skip malformed */
-                }
-            }
-            return agents;
+            return this.hydrateDocuments<AgentCard>(docs, (content) =>
+                this.tryJsonParse<AgentCard>(content),
+            );
         } catch {
             return [];
         }
@@ -309,30 +458,15 @@ ${finding.content}
     async getFinding(findingId: string): Promise<Finding | null> {
         try {
             // Search by ID in the findings directory
-            const result = await this.cat(`findings/**/${findingId}.md`);
-            // Parse frontmatter
-            const match = result.match(
-                /^---\n([\s\S]*?)\n---\n\n# (.*?)\n\n([\s\S]*)$/,
-            );
-            if (!match) return null;
-
-            const frontmatter: Record<string, any> = {};
-            match[1].split("\n").forEach((line) => {
-                const [key, ...rest] = line.split(": ");
-                if (key && rest.length) {
-                    try {
-                        frontmatter[key] = JSON.parse(rest.join(": "));
-                    } catch {
-                        frontmatter[key] = rest.join(": ");
-                    }
-                }
-            });
-
-            return {
-                ...frontmatter,
-                title: match[2],
-                content: match[3].trim(),
-            } as Finding;
+            const result = await this.catByName(`findings/**/${findingId}.md`);
+            const parsed = this.parseFindingMarkdown(result);
+            if (!parsed) {
+                return null;
+            }
+            if (parsed.id) {
+                this.putCachedContent(`findings/${parsed.topic}/${parsed.id}.md`, result);
+            }
+            return parsed;
         } catch {
             return null;
         }
@@ -356,25 +490,16 @@ ${finding.content}
                 query.limit,
                 query.offset,
             );
-
-            const findings: Finding[] = [];
-            for (const doc of docs) {
-                const id = doc.name
-                    ?.split("/")
-                    .pop()
-                    ?.replace(".md", "");
-                if (!id) continue;
-                const finding = await this.getFinding(id);
-                if (finding) {
-                    if (
-                        query.min_confidence &&
-                        finding.confidence < query.min_confidence
-                    )
-                        continue;
-                    findings.push(finding);
-                }
+            const findings = await this.hydrateDocuments<Finding>(
+                docs,
+                (content) => this.parseFindingMarkdown(content),
+            );
+            if (!query.min_confidence) {
+                return findings;
             }
-            return findings;
+            return findings.filter(
+                (finding) => finding.confidence >= query.min_confidence!,
+            );
         } catch {
             return [];
         }
@@ -396,19 +521,23 @@ ${finding.content}
                 matchAllTags: true,
                 limit,
             });
-
-            const findings: Finding[] = [];
-            for (const r of result.results) {
-                const id = r.path
-                    ?.split("/")
-                    .pop()
-                    ?.replace(".md", "");
-                if (id) {
-                    const finding = await this.getFinding(id);
-                    if (finding) findings.push(finding);
-                }
-            }
-            return findings;
+            const findings = await this.mapLimit(
+                result.results,
+                this.hydrationConcurrency,
+                async (entry) => {
+                    const path = entry.path || "";
+                    if (!path) {
+                        return null;
+                    }
+                    try {
+                        const content = await this.catByName(path);
+                        return this.parseFindingMarkdown(content);
+                    } catch {
+                        return null;
+                    }
+                },
+            );
+            return findings.filter((f): f is Finding => f !== null);
         } catch {
             return [];
         }
@@ -509,8 +638,8 @@ ${finding.content}
 
     async getTask(taskId: string): Promise<Task | null> {
         try {
-            const result = await this.cat(`tasks/${taskId}.json`);
-            return JSON.parse(result);
+            const result = await this.catByName(`tasks/${taskId}.json`);
+            return this.tryJsonParse<Task>(result);
         } catch {
             return null;
         }
@@ -533,17 +662,9 @@ ${finding.content}
                 query.limit,
                 query.offset,
             );
-
-            const tasks: Task[] = [];
-            for (const doc of docs) {
-                const id = doc.name
-                    ?.replace("tasks/", "")
-                    .replace(".json", "");
-                if (!id) continue;
-                const task = await this.getTask(id);
-                if (task) tasks.push(task);
-            }
-            return tasks;
+            return this.hydrateDocuments<Task>(docs, (content) =>
+                this.tryJsonParse<Task>(content),
+            );
         } catch {
             return [];
         }
@@ -701,8 +822,8 @@ ${finding.content}
 
     async getContext(contextId: string): Promise<Context | null> {
         try {
-            const result = await this.cat(`contexts/${contextId}.json`);
-            return JSON.parse(result);
+            const result = await this.catByName(`contexts/${contextId}.json`);
+            return this.tryJsonParse<Context>(result);
         } catch {
             return null;
         }
@@ -872,10 +993,10 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
         contextId: string,
     ): Promise<CompactionManifest | null> {
         try {
-            const result = await this.cat(
+            const result = await this.catByName(
                 `contexts/${contextId}/compaction-manifest.json`,
             );
-            return JSON.parse(result);
+            return this.tryJsonParse<CompactionManifest>(result);
         } catch {
             return null;
         }
@@ -960,18 +1081,23 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
                 matchAllTags: true,
                 limit,
             });
-
-            const tasks: Task[] = [];
-            for (const r of result.results) {
-                const id = r.path
-                    ?.replace("tasks/", "")
-                    .replace(".json", "");
-                if (id) {
-                    const task = await this.getTask(id);
-                    if (task) tasks.push(task);
-                }
-            }
-            return tasks;
+            const tasks = await this.mapLimit(
+                result.results,
+                this.hydrationConcurrency,
+                async (entry) => {
+                    const path = entry.path || "";
+                    if (!path || !path.startsWith("tasks/")) {
+                        return null;
+                    }
+                    try {
+                        const content = await this.catByName(path);
+                        return this.tryJsonParse<Task>(content);
+                    } catch {
+                        return null;
+                    }
+                },
+            );
+            return tasks.filter((task): task is Task => task !== null);
         } catch {
             return [];
         }
@@ -993,30 +1119,54 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
                 limit,
             });
 
-            const findings: Finding[] = [];
-            const tasks: Task[] = [];
+            const hydrated = await this.mapLimit(
+                result.results,
+                this.hydrationConcurrency,
+                async (entry) => {
+                    const path = entry.path || "";
+                    if (!path) {
+                        return null;
+                    }
+                    if (path.startsWith("findings/")) {
+                        try {
+                            const content = await this.catByName(path);
+                            const finding = this.parseFindingMarkdown(content);
+                            if (!finding) {
+                                return null;
+                            }
+                            return { kind: "finding" as const, finding };
+                        } catch {
+                            return null;
+                        }
+                    }
+                    if (path.startsWith("tasks/")) {
+                        try {
+                            const content = await this.catByName(path);
+                            const task = this.tryJsonParse<Task>(content);
+                            if (!task) {
+                                return null;
+                            }
+                            return { kind: "task" as const, task };
+                        } catch {
+                            return null;
+                        }
+                    }
+                    return null;
+                },
+            );
 
-            for (const r of result.results) {
-                const path = r.path || "";
-                if (path.startsWith("findings/")) {
-                    const id = path
-                        .split("/")
-                        .pop()
-                        ?.replace(".md", "");
-                    if (id) {
-                        const finding = await this.getFinding(id);
-                        if (finding) findings.push(finding);
-                    }
-                } else if (path.startsWith("tasks/")) {
-                    const id = path
-                        .replace("tasks/", "")
-                        .replace(".json", "");
-                    if (id) {
-                        const task = await this.getTask(id);
-                        if (task) tasks.push(task);
-                    }
-                }
-            }
+            const findings = hydrated
+                .filter(
+                    (entry): entry is { kind: "finding"; finding: Finding } =>
+                        entry !== null && entry.kind === "finding",
+                )
+                .map((entry) => entry.finding);
+            const tasks = hydrated
+                .filter(
+                    (entry): entry is { kind: "task"; task: Task } =>
+                        entry !== null && entry.kind === "task",
+                )
+                .map((entry) => entry.task);
 
             return { findings, tasks };
         } catch {
@@ -1187,6 +1337,7 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
             `subscriptions/${subscription.subscriber_id}/${id}.json`,
             tags,
         );
+        this.activeSubscriptionsCache = undefined;
 
         return subscription;
     }
@@ -1196,10 +1347,10 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
         subscriptionId: string,
     ): Promise<Subscription | null> {
         try {
-            const result = await this.cat(
+            const result = await this.catByName(
                 `subscriptions/${subscriberId}/${subscriptionId}.json`,
             );
-            return JSON.parse(result);
+            return this.tryJsonParse<Subscription>(result);
         } catch {
             return null;
         }
@@ -1218,26 +1369,19 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
                 100,
             );
 
-            const subscriptions: Subscription[] = [];
-            for (const doc of docs) {
-                try {
-                    const content = await this.cat(doc.name);
-                    const sub = JSON.parse(content);
-                    // Filter out expired subscriptions
-                    if (
-                        sub.expires_at &&
-                        new Date(sub.expires_at) < new Date()
-                    ) {
-                        continue;
-                    }
-                    if (sub.status === "active") {
-                        subscriptions.push(sub);
-                    }
-                } catch {
-                    /* skip malformed */
+            const subscriptions = await this.hydrateDocuments<Subscription>(
+                docs,
+                (content) => this.tryJsonParse<Subscription>(content),
+            );
+            return subscriptions.filter((sub) => {
+                if (!sub || sub.status !== "active") {
+                    return false;
                 }
-            }
-            return subscriptions;
+                if (sub.expires_at && new Date(sub.expires_at) < new Date()) {
+                    return false;
+                }
+                return true;
+            });
         } catch {
             return [];
         }
@@ -1269,6 +1413,7 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
                 `subscriptions/${subscriberId}/${subscriptionId}.json`,
                 tags,
             );
+            this.activeSubscriptionsCache = undefined;
             return true;
         } catch {
             return false;
@@ -1280,6 +1425,40 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
     ): Promise<Subscription[]> {
         const matching: Subscription[] = [];
 
+        const now = Date.now();
+        if (this.activeSubscriptionsCache && this.activeSubscriptionsCache.expiresAt > now) {
+            return this.activeSubscriptionsCache.subscriptions.filter((sub) => {
+                if (sub.filters?.exclude_self !== false && sub.subscriber_id === event.source_agent_id) {
+                    return false;
+                }
+                let matches = false;
+                switch (sub.pattern_type) {
+                    case "topic":
+                        matches = event.topic === sub.pattern_value;
+                        break;
+                    case "agent":
+                        matches = event.source_agent_id === sub.pattern_value;
+                        break;
+                    case "status":
+                        matches = event.status === sub.pattern_value;
+                        break;
+                    case "context":
+                        matches = event.context_id === sub.pattern_value;
+                        break;
+                    case "entity":
+                        matches = event.source_type === sub.pattern_value;
+                        break;
+                }
+                if (!matches) {
+                    return false;
+                }
+                if (sub.filters?.severity?.length && event.severity) {
+                    return sub.filters.severity.includes(event.severity);
+                }
+                return true;
+            });
+        }
+
         try {
             const docs = await this.listDocs(
                 [
@@ -1290,19 +1469,27 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
                 500,
             );
 
-            for (const doc of docs) {
+            const subscriptions = await this.hydrateDocuments<Subscription>(
+                docs,
+                (content) => this.tryJsonParse<Subscription>(content),
+            );
+            const activeSubscriptions = subscriptions.filter((sub) => {
+                if (!sub || sub.status !== "active") {
+                    return false;
+                }
+                if (sub.expires_at && new Date(sub.expires_at) < new Date()) {
+                    return false;
+                }
+                return true;
+            });
+
+            this.activeSubscriptionsCache = {
+                subscriptions: activeSubscriptions,
+                expiresAt: now + this.activeSubscriptionCacheTtlMs,
+            };
+
+            for (const sub of activeSubscriptions) {
                 try {
-                    const content = await this.cat(doc.name);
-                    const sub: Subscription = JSON.parse(content);
-
-                    // Check expiration
-                    if (
-                        sub.expires_at &&
-                        new Date(sub.expires_at) < new Date()
-                    ) {
-                        continue;
-                    }
-
                     // Check exclude_self filter
                     if (
                         sub.filters?.exclude_self !== false &&
@@ -1430,15 +1617,10 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
                 limit,
             );
 
-            const notifications: Notification[] = [];
-            for (const doc of docs) {
-                try {
-                    const content = await this.cat(doc.name);
-                    notifications.push(JSON.parse(content));
-                } catch {
-                    /* skip malformed */
-                }
-            }
+            const notifications = await this.hydrateDocuments<Notification>(
+                docs,
+                (content) => this.tryJsonParse<Notification>(content),
+            );
 
             // Sort by created_at descending (newest first)
             return notifications.sort(
@@ -1457,8 +1639,11 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
     ): Promise<boolean> {
         try {
             const path = `notifications/${recipientId}/${notificationId}.json`;
-            const content = await this.cat(path);
-            const notification: Notification = JSON.parse(content);
+            const content = await this.catByName(path);
+            const notification = this.tryJsonParse<Notification>(content);
+            if (!notification) {
+                return false;
+            }
 
             notification.status = "read";
             notification.read_at = this.nowISO();
@@ -1511,8 +1696,11 @@ ${blockedTasks.length ? `- ${blockedTasks.length} tasks blocked` : ""}
     ): Promise<boolean> {
         try {
             const path = `notifications/${recipientId}/${notificationId}.json`;
-            const content = await this.cat(path);
-            const notification: Notification = JSON.parse(content);
+            const content = await this.catByName(path);
+            const notification = this.tryJsonParse<Notification>(content);
+            if (!notification) {
+                return false;
+            }
 
             notification.status = "dismissed";
 
