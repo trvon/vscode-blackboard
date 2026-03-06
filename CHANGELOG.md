@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/trvon/vscode-blackboard/compare/vscode-blackboard-v0.2.1...vscode-blackboard-v0.2.2) (2026-03-06)
+
+
+### Bug Fixes
+
+* reduce blackboard churn and publish on release creation ([c3ea7da](https://github.com/trvon/vscode-blackboard/commit/c3ea7da99e9da509dddba408223ed460a668bdcd))
+
 ## [0.2.1](https://github.com/trvon/vscode-blackboard/compare/vscode-blackboard-v0.2.0...vscode-blackboard-v0.2.1) (2026-02-22)
 
 
