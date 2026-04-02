@@ -7,6 +7,14 @@
 
 import * as vscode from "vscode";
 import type { YamsBlackboard } from "./blackboard/blackboard.js";
+import {
+    getReadOnlyToolNames,
+    getWriteToolNames,
+    isKnownToolName,
+    sanitizeToolInput,
+    shouldEnableWriteTools,
+    shouldRunPreflight,
+} from "./participant-policy.js";
 
 function extractAssistantHistory(chatContext: vscode.ChatContext): vscode.LanguageModelChatMessage[] {
     const messages: vscode.LanguageModelChatMessage[] = [];
@@ -68,114 +76,6 @@ Always be concise and format output for readability.`;
 // Tool names we want the model to have access to
 // ---------------------------------------------------------------------------
 
-const BB_TOOL_NAMES = [
-    "bb_register_agent",
-    "bb_list_agents",
-    "bb_post_finding",
-    "bb_query_findings",
-    "bb_search_findings",
-    "bb_get_finding",
-    "bb_acknowledge_finding",
-    "bb_resolve_finding",
-    "bb_create_task",
-    "bb_get_ready_tasks",
-    "bb_claim_task",
-    "bb_update_task",
-    "bb_complete_task",
-    "bb_fail_task",
-    "bb_query_tasks",
-    "bb_search_tasks",
-    "bb_create_context",
-    "bb_get_context_summary",
-    "bb_set_context",
-    "bb_recent_activity",
-    "bb_stats",
-    "bb_connections",
-    "bb_search",
-    "bb_grep",
-    "bb_subscribe",
-    "bb_unsubscribe",
-    "bb_list_subscriptions",
-    "bb_check_notifications",
-    "bb_notification_count",
-    "bb_mark_notification_read",
-    "bb_mark_all_read",
-    "bb_dismiss_notification",
-];
-
-const READ_ONLY_TOOL_NAMES = [
-    "bb_list_agents",
-    "bb_query_findings",
-    "bb_search_findings",
-    "bb_get_finding",
-    "bb_get_ready_tasks",
-    "bb_query_tasks",
-    "bb_search_tasks",
-    "bb_get_context_summary",
-    "bb_set_context",
-    "bb_recent_activity",
-    "bb_stats",
-    "bb_connections",
-    "bb_search",
-    "bb_grep",
-    "bb_list_subscriptions",
-    "bb_check_notifications",
-    "bb_notification_count",
-];
-
-const WRITE_TOOL_NAMES = [
-    "bb_register_agent",
-    "bb_post_finding",
-    "bb_acknowledge_finding",
-    "bb_resolve_finding",
-    "bb_create_task",
-    "bb_claim_task",
-    "bb_update_task",
-    "bb_complete_task",
-    "bb_fail_task",
-    "bb_create_context",
-    "bb_subscribe",
-    "bb_unsubscribe",
-    "bb_mark_notification_read",
-    "bb_mark_all_read",
-    "bb_dismiss_notification",
-];
-
-function isKnownToolName(name: string): boolean {
-    return BB_TOOL_NAMES.includes(name);
-}
-
-function shouldEnableWriteTools(request: vscode.ChatRequest): boolean {
-    const referenced = new Set(request.toolReferences.map((t) => t.name));
-    for (const t of WRITE_TOOL_NAMES) {
-        if (referenced.has(t)) return true;
-    }
-
-    const p = (request.prompt ?? "").toLowerCase();
-    if (!p) return false;
-
-    // Intent gating: only enable write tools when the user explicitly asks
-    // to create/record/update blackboard state.
-    const writeIntent =
-        /\b(post|record|log|save|store|create|open|file|add|update|resolve|acknowledge|claim|complete|fail|subscribe|unsubscribe)\b/.test(
-            p,
-        ) &&
-        /\b(finding|task|context|subscription|notification|agent|blackboard)\b/.test(
-            p,
-        );
-
-    return writeIntent;
-}
-
-function shouldRunPreflight(requestPrompt: string): boolean {
-    const p = (requestPrompt ?? "").toLowerCase();
-    if (!p.trim()) return false;
-    // Only preflight when the user is asking about current state.
-    return /\b(show|list|stats|status|recent|activity|progress|queue|pending|claimed|working|blocked|notifications|agents|findings|tasks)\b/.test(
-        p,
-    );
-}
-
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -207,10 +107,12 @@ async function handleRequest(
     // Build tool references for the tools we registered
     const allTools = vscode.lm.tools;
     const allowWrites = shouldEnableWriteTools(request);
+    const readOnlyToolNames = new Set(getReadOnlyToolNames());
+    const writeToolNames = new Set(getWriteToolNames());
     const allowedNames = new Set(
         allowWrites
-            ? [...READ_ONLY_TOOL_NAMES, ...WRITE_TOOL_NAMES]
-            : READ_ONLY_TOOL_NAMES,
+            ? [...readOnlyToolNames, ...writeToolNames]
+            : readOnlyToolNames,
     );
     const bbTools = allTools.filter(
         (t) => allowedNames.has(t.name) && isKnownToolName(t.name),
@@ -297,7 +199,7 @@ async function handleRequest(
                 const result = await vscode.lm.invokeTool(
                     call.name,
                     {
-                        input: call.input,
+                        input: sanitizeToolInput(call.name, call.input, allowWrites),
                         toolInvocationToken: request.toolInvocationToken,
                     },
                     token,
@@ -376,7 +278,7 @@ async function handleRequest(
                 const result = await vscode.lm.invokeTool(
                     call.name,
                     {
-                        input: call.input,
+                        input: sanitizeToolInput(call.name, call.input, allowWrites),
                         toolInvocationToken: request.toolInvocationToken,
                     },
                     token,

@@ -9,6 +9,7 @@
 import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
 import { YamsDaemonClient } from "./daemon/client.js";
+import { resolveDaemonMode, resolveExtensionTransportState } from "./daemon/mode.js";
 import { socketExists, resolveSocketPath } from "./daemon/socket.js";
 import { YamsBlackboard } from "./blackboard/blackboard.js";
 import type { ContextState } from "./tools/context-tools.js";
@@ -31,7 +32,7 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 // Status bar helpers
 // ---------------------------------------------------------------------------
 
-type ConnectionStatus = "connected" | "disconnected" | "reconnecting";
+type ConnectionStatus = "connected" | "disconnected" | "reconnecting" | "unsupported";
 
 function updateStatusBar(status: ConnectionStatus): void {
     if (!statusBarItem) return;
@@ -57,6 +58,14 @@ function updateStatusBar(status: ConnectionStatus): void {
                 "statusBarItem.warningBackground",
             );
             break;
+        case "unsupported":
+            statusBarItem.text = "$(warning) Blackboard";
+            statusBarItem.tooltip =
+                "YAMS Blackboard: Embedded mode configured, but this extension requires socket transport";
+            statusBarItem.backgroundColor = new vscode.ThemeColor(
+                "statusBarItem.warningBackground",
+            );
+            break;
     }
 }
 
@@ -67,6 +76,10 @@ function updateStatusBar(status: ConnectionStatus): void {
 export async function activate(
     context: vscode.ExtensionContext,
 ): Promise<void> {
+    const daemonMode = resolveDaemonMode();
+    const hasSocket = socketExists();
+    const transportState = resolveExtensionTransportState(daemonMode, hasSocket);
+
     // 1. Create status bar item
     statusBarItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right,
@@ -88,9 +101,15 @@ export async function activate(
     // We track connection status via client.connected + best-effort connect loop.
 
     // 4. Attempt connection (non-blocking)
-    updateStatusBar("disconnected");
+    updateStatusBar(
+        transportState.status === "unsupported" ? "unsupported" : "disconnected",
+    );
 
-    if (socketExists()) {
+    if (transportState.status === "unsupported") {
+        vscode.window.showWarningMessage(
+            "YAMS Blackboard: Embedded mode is configured, but this extension only supports socket transport.",
+        );
+    } else if (transportState.canAttemptConnect) {
         try {
             await client.connect();
             updateStatusBar("connected");
@@ -102,7 +121,7 @@ export async function activate(
         }
     } else {
         vscode.window.showInformationMessage(
-            `YAMS Blackboard: Daemon socket not found at ${resolveSocketPath()}. Tools will activate when the daemon starts.`,
+            `YAMS Blackboard: Daemon socket not found at ${resolveSocketPath()}. This extension requires socket transport and will activate when a socket-backed daemon starts.`,
         );
     }
 
@@ -179,6 +198,7 @@ export async function activate(
 
     const ensureConnected = async () => {
         if (!client || client.connected || connectInFlight) return;
+        if (!transportState.shouldPoll) return;
         if (!socketExists()) return;
         connectInFlight = true;
         updateStatusBar("reconnecting");
@@ -210,22 +230,24 @@ export async function activate(
     void tryRegisterDefaultAgent();
 
     // Poll connection state to update status bar + attempt connect when daemon starts.
-    const poll = setInterval(() => {
-        if (!client) return;
-        void ensureConnected();
+    if (transportState.shouldPoll) {
+        const poll = setInterval(() => {
+            if (!client) return;
+            void ensureConnected();
 
-        if (!client.connected) {
-            sessionStarted = false;
-            defaultAgentRegistered = false;
-            if (!connectInFlight) updateStatusBar("disconnected");
-            return;
-        }
+            if (!client.connected) {
+                sessionStarted = false;
+                defaultAgentRegistered = false;
+                if (!connectInFlight) updateStatusBar("disconnected");
+                return;
+            }
 
-        updateStatusBar("connected");
-        startSessionOnce();
-        void tryRegisterDefaultAgent();
-    }, 5_000);
-    context.subscriptions.push({ dispose: () => clearInterval(poll) });
+            updateStatusBar("connected");
+            startSessionOnce();
+            void tryRegisterDefaultAgent();
+        }, 5_000);
+        context.subscriptions.push({ dispose: () => clearInterval(poll) });
+    }
 
     // 10. Ensure client cleanup
     context.subscriptions.push({

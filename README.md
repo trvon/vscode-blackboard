@@ -2,13 +2,19 @@
 
 VS Code extension for multi-agent coordination on top of YAMS.
 
-This extension ports the OpenCode blackboard plugin to VS Code and talks to the YAMS daemon directly over Unix domain socket IPC (protobuf + framed transport). It registers `bb_*` Language Model tools and an `@blackboard` chat participant. 
+This extension ports the OpenCode blackboard plugin to VS Code and talks to the YAMS daemon directly over Unix domain socket IPC (protobuf + framed transport). It registers `bb_*` Language Model tools and an `@blackboard` chat participant.
 
 ## Requirements
 
 - VS Code `^1.95.0`
 - GitHub Copilot Chat enabled (for chat participant + LM tools)
-- YAMS daemon running locally (the extension connects via Unix domain socket)
+- YAMS daemon running locally with socket transport enabled (the extension connects via Unix domain socket)
+
+### Transport support
+
+- Supported: socket-backed YAMS daemon transport
+- Unsupported: `YAMS_EMBEDDED=1` and `daemon.mode = "embedded"`
+- `YAMS_EMBEDDED=auto` may still work when a socket-backed daemon is available
 
 ## Usage
 
@@ -47,6 +53,7 @@ npm run proto:generate
 ## Notes
 
 - This extension is designed to degrade gracefully if the daemon is not running; tools will fail with a connection error until the daemon becomes available.
+- If YAMS is configured for explicit embedded/in-process mode, the extension will report that socket transport is required instead of waiting for a daemon socket that will never appear.
 - The extension bundles via `esbuild` into `dist/extension.js`.
 
 ## License
