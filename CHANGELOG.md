@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/trvon/vscode-blackboard/compare/vscode-blackboard-v0.2.2...vscode-blackboard-v0.2.3) (2026-04-02)
+
+
+### Bug Fixes
+
+* report embedded mode as unsupported and enforce read-only tool behavior ([28d1f29](https://github.com/trvon/vscode-blackboard/commit/28d1f29961b3f15638124898567d07513f3dd6b5))
+
 ## [0.2.2](https://github.com/trvon/vscode-blackboard/compare/vscode-blackboard-v0.2.1...vscode-blackboard-v0.2.2) (2026-03-06)
 
 
