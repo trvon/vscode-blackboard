@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/trvon/vscode-blackboard/compare/vscode-blackboard-v0.2.3...vscode-blackboard-v0.2.4) (2026-04-04)
+
+
+### Bug Fixes
+
+* vscode-blackboard socket resolution for configured daemon paths ([9dc06a6](https://github.com/trvon/vscode-blackboard/commit/9dc06a6ea30a50f2b7ded7b458d70d8cb3a2df9d))
+
 ## [0.2.3](https://github.com/trvon/vscode-blackboard/compare/vscode-blackboard-v0.2.2...vscode-blackboard-v0.2.3) (2026-04-02)
 
 
