@@ -31,6 +31,43 @@ function stripInlineComment(value: string): string {
   return value.trim();
 }
 
+function parseDaemonConfigValue(text: string, key: string): string | undefined {
+  let inDaemonSection = false;
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    if (line.startsWith("[") && line.endsWith("]")) {
+      inDaemonSection = line === "[daemon]";
+      continue;
+    }
+
+    if (!inDaemonSection) {
+      continue;
+    }
+
+    const match = line.match(new RegExp(`^${key}\\s*=\\s*(.+)$`));
+    if (!match) {
+      continue;
+    }
+
+    const rhs = stripInlineComment(match[1]);
+    if (!rhs) {
+      return undefined;
+    }
+
+    return (rhs.startsWith('"') && rhs.endsWith('"')) ||
+        (rhs.startsWith("'") && rhs.endsWith("'"))
+      ? rhs.slice(1, -1)
+      : rhs;
+  }
+
+  return undefined;
+}
+
 export function normalizeDaemonMode(raw: string | undefined | null): DaemonMode | undefined {
   if (!raw) {
     return undefined;
@@ -57,44 +94,15 @@ export function normalizeDaemonMode(raw: string | undefined | null): DaemonMode 
 }
 
 export function parseDaemonModeFromConfig(text: string): DaemonMode | undefined {
-  let inDaemonSection = false;
-
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-
-    if (line.startsWith("[") && line.endsWith("]")) {
-      inDaemonSection = line === "[daemon]";
-      continue;
-    }
-
-    if (!inDaemonSection) {
-      continue;
-    }
-
-    const match = line.match(/^mode\s*=\s*(.+)$/);
-    if (!match) {
-      continue;
-    }
-
-    const rhs = stripInlineComment(match[1]);
-    if (!rhs) {
-      return undefined;
-    }
-
-    const unquoted =
-      (rhs.startsWith('"') && rhs.endsWith('"')) || (rhs.startsWith("'") && rhs.endsWith("'"))
-        ? rhs.slice(1, -1)
-        : rhs;
-    return normalizeDaemonMode(unquoted);
-  }
-
-  return undefined;
+  const value = parseDaemonConfigValue(text, "mode");
+  return normalizeDaemonMode(value);
 }
 
-function defaultConfigPath(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string | undefined {
+export function parseDaemonSocketPathFromConfig(text: string): string | undefined {
+  return parseDaemonConfigValue(text, "socket_path");
+}
+
+export function defaultConfigPath(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string | undefined {
   if (env.YAMS_CONFIG) {
     return env.YAMS_CONFIG;
   }

@@ -1,19 +1,24 @@
 /**
  * Unix domain socket connection manager for YAMS daemon IPC.
  *
- * Resolves the socket path via environment variables and provides
+ * Resolves the socket path via the same precedence as YAMS itself and provides
  * connection lifecycle management with auto-reconnect.
  *
  * Resolution order:
  *   1. $YAMS_DAEMON_SOCKET
- *   2. $XDG_RUNTIME_DIR/yams-daemon.sock
- *   3. /tmp/yams-daemon-<uid>.sock
+ *   2. `daemon.socket_path` from YAMS config.toml
+ *   3. $XDG_RUNTIME_DIR/yams-daemon.sock
+ *   4. /tmp/yams-daemon-<uid>.sock
  */
 
 import * as net from "node:net";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import { EventEmitter } from "node:events";
+import {
+  defaultConfigPath,
+  parseDaemonSocketPathFromConfig,
+} from "./mode.js";
 
 // -----------------------------------------------------------------------------
 // Socket path resolution
@@ -25,19 +30,43 @@ export function resolveSocketPath(): string {
   const explicit = process.env.YAMS_DAEMON_SOCKET;
   if (explicit) return explicit;
 
-  // 2. XDG runtime directory
+  // 2. Root default matches the daemon's own resolution.
+  const uid = os.userInfo().uid;
+  if (uid === 0) return "/var/run/yams-daemon.sock";
+
+  // 3. XDG runtime directory
   const xdg = process.env.XDG_RUNTIME_DIR;
   if (xdg) return `${xdg}/yams-daemon.sock`;
 
-  // 3. Fallback: /tmp with uid
-  const uid = os.userInfo().uid;
+  // 4. Fallback: /tmp with uid
   return `/tmp/yams-daemon-${uid}.sock`;
+}
+
+/** Resolve the socket path with config.toml precedence, matching YAMS. */
+export function resolveSocketPathConfigFirst(): string {
+  const explicit = process.env.YAMS_DAEMON_SOCKET;
+  if (explicit) return explicit;
+
+  const configPath = defaultConfigPath(process.env, process.platform);
+  if (configPath) {
+    try {
+      const configText = fs.readFileSync(configPath, "utf8");
+      const configured = parseDaemonSocketPathFromConfig(configText);
+      if (configured) {
+        return configured;
+      }
+    } catch {
+      // Ignore config read/parse failures and fall back to default resolution.
+    }
+  }
+
+  return resolveSocketPath();
 }
 
 /** Check whether the daemon socket file exists on disk. */
 export function socketExists(path?: string): boolean {
   try {
-    const p = path ?? resolveSocketPath();
+    const p = path ?? resolveSocketPathConfigFirst();
     return fs.statSync(p).isSocket();
   } catch {
     return false;
@@ -61,7 +90,7 @@ export interface SocketConnectionEvents {
 // -----------------------------------------------------------------------------
 
 export interface SocketConnectionOptions {
-  /** Override the socket path (defaults to resolveSocketPath()). */
+  /** Override the socket path (defaults to resolveSocketPathConfigFirst()). */
   socketPath?: string;
   /** Enable auto-reconnect on disconnect (default: true). */
   autoReconnect?: boolean;
@@ -95,7 +124,7 @@ export class SocketConnection extends EventEmitter<SocketConnectionEvents> {
 
   constructor(opts: SocketConnectionOptions = {}) {
     super();
-    this.socketPath = opts.socketPath ?? resolveSocketPath();
+    this.socketPath = opts.socketPath ?? resolveSocketPathConfigFirst();
     this.autoReconnect = opts.autoReconnect ?? true;
     this.reconnectBaseMs = opts.reconnectBaseMs ?? 500;
     this.reconnectMaxMs = opts.reconnectMaxMs ?? 30_000;

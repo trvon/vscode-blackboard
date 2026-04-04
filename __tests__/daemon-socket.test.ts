@@ -7,7 +7,12 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 
-import { resolveSocketPath, socketExists, SocketConnection } from "../src/daemon/socket.js";
+import {
+  resolveSocketPath,
+  resolveSocketPathConfigFirst,
+  socketExists,
+  SocketConnection,
+} from "../src/daemon/socket.js";
 
 function withEnv<T>(name: string, value: string | undefined, fn: () => T): T {
   const prev = process.env[name];
@@ -50,6 +55,57 @@ test("resolveSocketPath falls back to /tmp/yams-daemon-<uid>.sock", () => {
   // We don't assert the uid value directly (can vary in CI containers), just the prefix.
   assert.ok(p.startsWith("/tmp/yams-daemon-"));
   assert.ok(p.endsWith(".sock"));
+});
+
+test("resolveSocketPathConfigFirst uses daemon.socket_path from YAMS_CONFIG", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "vscode-blackboard-config-"));
+  const configPath = path.join(dir, "config.toml");
+
+  await fs.writeFile(configPath, '[daemon]\nsocket_path = "/tmp/from-config.sock"\n');
+
+  const resolved = withEnv("YAMS_DAEMON_SOCKET", undefined, () =>
+    withEnv("YAMS_CONFIG", configPath, () =>
+      withEnv("XDG_RUNTIME_DIR", "/run/user/1000", () => resolveSocketPathConfigFirst()),
+    ),
+  );
+
+  assert.equal(resolved, "/tmp/from-config.sock");
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test("resolveSocketPathConfigFirst lets env override config", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "vscode-blackboard-config-"));
+  const configPath = path.join(dir, "config.toml");
+
+  await fs.writeFile(configPath, '[daemon]\nsocket_path = "/tmp/from-config.sock"\n');
+
+  const resolved = withEnv("YAMS_DAEMON_SOCKET", "/tmp/from-env.sock", () =>
+    withEnv("YAMS_CONFIG", configPath, () => resolveSocketPathConfigFirst()),
+  );
+
+  assert.equal(resolved, "/tmp/from-env.sock");
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test("socketExists checks the config-resolved socket path by default", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "vscode-blackboard-config-"));
+  const sockPath = path.join(dir, "daemon.sock");
+  const configPath = path.join(dir, "config.toml");
+
+  await fs.writeFile(configPath, `[daemon]\nsocket_path = "${sockPath}"\n`);
+
+  const server = net.createServer();
+  server.listen(sockPath);
+  await once(server, "listening");
+
+  const exists = withEnv("YAMS_DAEMON_SOCKET", undefined, () =>
+    withEnv("YAMS_CONFIG", configPath, () => socketExists()),
+  );
+
+  assert.equal(exists, true);
+
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await fs.rm(dir, { recursive: true, force: true });
 });
 
 test("socketExists returns true for a real unix socket, false for a regular file", async () => {

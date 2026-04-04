@@ -10,7 +10,7 @@ import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
 import { YamsDaemonClient } from "./daemon/client.js";
 import { resolveDaemonMode, resolveExtensionTransportState } from "./daemon/mode.js";
-import { socketExists, resolveSocketPath } from "./daemon/socket.js";
+import { socketExists, resolveSocketPathConfigFirst } from "./daemon/socket.js";
 import { YamsBlackboard } from "./blackboard/blackboard.js";
 import type { ContextState } from "./tools/context-tools.js";
 import { registerAgentTools } from "./tools/agent-tools.js";
@@ -121,7 +121,7 @@ export async function activate(
         }
     } else {
         vscode.window.showInformationMessage(
-            `YAMS Blackboard: Daemon socket not found at ${resolveSocketPath()}. This extension requires socket transport and will activate when a socket-backed daemon starts.`,
+            `YAMS Blackboard: Daemon socket not found at ${resolveSocketPathConfigFirst()}. This extension requires socket transport and will activate when a socket-backed daemon starts.`,
         );
     }
 
